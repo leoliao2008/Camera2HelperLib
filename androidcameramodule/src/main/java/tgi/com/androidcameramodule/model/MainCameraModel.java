@@ -3,7 +3,9 @@ package tgi.com.androidcameramodule.model;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.PixelFormat;
+import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -18,6 +20,7 @@ import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
+import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
 
@@ -44,7 +47,7 @@ public class MainCameraModel {
     @SuppressLint("MissingPermission")
     public void openMainCamera(
             String cameraId,
-            final Surface previewSurface,
+            final Surface preView,
             final PreviewCallback callback,
             @Nullable final Surface reprocessSurface,
             @Nullable final Handler handler) throws CameraAccessException, IllegalArgumentException, SecurityException {
@@ -58,22 +61,29 @@ public class MainCameraModel {
                         try {
                             final List<Surface> outputs = new ArrayList<Surface>() {
                                 {
-                                    add(previewSurface);
+                                    add(preView);
                                     if (reprocessSurface != null) {
                                         add(reprocessSurface);
                                     }
                                 }
                             };
                             final CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-                            builder.addTarget(previewSurface);
+                            builder.addTarget(preView);
                             camera.createCaptureSession(
                                     outputs,
                                     new CameraCaptureSession.StateCallback() {
                                         @Override
                                         public void onConfigured(@NonNull CameraCaptureSession session) {
+                                            //auto focus
                                             builder.set(
                                                     CaptureRequest.CONTROL_AF_MODE,
-                                                    CaptureRequest.CONTROL_AF_MODE_AUTO);
+                                                    CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+                                            );
+                                            //auto flash
+                                            builder.set(
+                                                    CaptureRequest.CONTROL_AE_MODE,
+                                                    CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH
+                                            );
                                             try {
                                                 session.setRepeatingRequest(
                                                         builder.build(),
@@ -88,6 +98,8 @@ public class MainCameraModel {
 
                                         @Override
                                         public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                                            camera.close();
+                                            callback.onError("createCaptureSession->onConfigureFailed: "+session.toString());
 
                                         }
                                     },
@@ -105,7 +117,7 @@ public class MainCameraModel {
                     @Override
                     public void onError(@NonNull CameraDevice camera, int error) {
                         camera.close();
-                        callback.onError("Camera Fails to open, error code: "+error);
+                        callback.onError("Camera Fails to open, error code: " + error);
 
                     }
                 },
@@ -121,7 +133,7 @@ public class MainCameraModel {
                 CameraCharacteristics chars = mCameraManager.getCameraCharacteristics(id);
                 //we need this to get the supported image sizes
                 StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-                if(map==null){
+                if (map == null) {
                     continue;
                 }
                 Integer direction = chars.get(CameraCharacteristics.LENS_FACING);
@@ -135,13 +147,14 @@ public class MainCameraModel {
         return null;
     }
 
-    public Size getClosestSupportedSize(Size parentSize, String cameraId, int format){
-        Size result=null;
+    public Size getClosestSupportedSize(Size parentSize, String cameraId, int OutputSizesFormat) {
+        Size result = null;
         try {
             CameraCharacteristics chars = mCameraManager.getCameraCharacteristics(cameraId);
             StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-            Size[] sizes = map.getOutputSizes(format);
-            final float parentRatio=parentSize.getWidth()*1.0f/parentSize.getHeight();
+            assert map != null;
+            Size[] sizes = map.getOutputSizes(OutputSizesFormat);
+            final float parentRatio=parentSize.getWidth() * 1.0f / parentSize.getHeight();
             result = Collections.max(
                     Arrays.asList(sizes),
                     new Comparator<Size>() {
@@ -157,6 +170,10 @@ public class MainCameraModel {
             e.printStackTrace();
         }
         return result;
+    }
+
+    private void showLog(String msg){
+        Log.e(getClass().getSimpleName(),msg);
     }
 
 }

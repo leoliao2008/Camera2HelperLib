@@ -2,23 +2,23 @@ package tgi.com.androidcameramodule.widget;
 
 import android.content.Context;
 import android.util.AttributeSet;
-import android.view.SurfaceView;
+import android.view.TextureView;
 
-public class ResizableSurfaceView extends SurfaceView {
+public class ResizableTextureView extends TextureView {
     private int mTargetAspectWidth = -1;
     private int mTargetAspectHeight = -1;
     private static final int DEFAULT_WITH = 400;
     private static final int DEFAULT_HEIGHT = 400;
 
-    public ResizableSurfaceView(Context context) {
+    public ResizableTextureView(Context context) {
         this(context, null);
     }
 
-    public ResizableSurfaceView(Context context, AttributeSet attrs) {
+    public ResizableTextureView(Context context, AttributeSet attrs) {
         this(context, attrs, 0);
     }
 
-    public ResizableSurfaceView(Context context, AttributeSet attrs, int defStyleAttr) {
+    public ResizableTextureView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
     }
 
@@ -38,7 +38,7 @@ public class ResizableSurfaceView extends SurfaceView {
         if (mTargetAspectWidth > 0 && mTargetAspectHeight > 0) {
             float currentRatio=width*1.f/height;
             float targetRatio= mTargetAspectWidth *1.f/ mTargetAspectHeight;
-            if(currentRatio>targetRatio){
+            if(currentRatio<targetRatio){
                 width= (int) (height*1.f* mTargetAspectWidth / mTargetAspectHeight);
             }else {
                 height= (int) (width*1.f* mTargetAspectHeight / mTargetAspectWidth);

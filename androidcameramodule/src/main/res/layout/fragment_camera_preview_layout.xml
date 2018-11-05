@@ -5,9 +5,10 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <tgi.com.androidcameramodule.widget.ResizableSurfaceView
-        android:id="@+id/fragment_camera_preview_surface_view"
+    <tgi.com.androidcameramodule.widget.ResizableTextureView
+        android:id="@+id/fragment_camera_preview_texture_view"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
+        android:layout_height="match_parent"
+        android:layout_gravity="center"/>
 
 </FrameLayout>
