@@ -3,7 +3,6 @@ package tgi.com.androidcameramodule.presenter;
 import android.hardware.camera2.CameraManager;
 
 import tgi.com.androidcameramodule.model.ICameraModel;
-import tgi.com.androidcameramodule.model.MainCameraModel;
 import tgi.com.androidcameramodule.view.ICameraView;
 
 public class CameraViewPresenter {
@@ -15,7 +14,7 @@ public class CameraViewPresenter {
     public CameraViewPresenter(ICameraView cameraView,CameraManager cameraManager) {
         mCameraView = cameraView;
         mCameraManager=cameraManager;
-//        mCameraModel=new MainCameraModel(mCameraManager);
+//        mCameraModel=new CameraModule(mCameraManager);
     }
 
     public void openCamera(){

@@ -4,7 +4,10 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.ImageFormat;
+import android.graphics.Matrix;
 import android.graphics.PixelFormat;
+import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -37,10 +40,10 @@ import tgi.com.androidcameramodule.utils.CameraPermissionHelper;
 /**
  * This model is with reference to https://blog.csdn.net/CrazyMo_/article/details/78182243
  */
-public class MainCameraModel {
+public class CameraModule {
     private CameraManager mCameraManager;
 
-    public MainCameraModel(CameraManager cameraManager) {
+    public CameraModule(CameraManager cameraManager) {
         mCameraManager = cameraManager;
     }
 
@@ -125,6 +128,33 @@ public class MainCameraModel {
         );
     }
 
+    public Matrix adjustPreviewMatrixDueToRotation(
+            int originWidth,
+            int originHeight,
+            int optimizedWidth,
+            int optimizedHeight,
+            int screenRotation){
+        RectF widgetBound=new RectF(0,0,originWidth,originHeight);
+        RectF previewBound=new RectF(0,0,optimizedHeight,optimizedWidth);//switch the width and height value
+        float x1 = widgetBound.centerY();
+        float y1 = widgetBound.centerX();
+        float x2= previewBound.centerX();
+        float y2 = previewBound.centerY();
+        previewBound.offset(x1-x2,y1-y2);
+        Matrix matrix=new Matrix();
+        matrix.setRectToRect(widgetBound,previewBound, Matrix.ScaleToFit.FILL);
+        float scale=Math.max(originWidth*1.0f/optimizedWidth,originHeight*1.0f/optimizedHeight);
+        matrix.postScale(scale,scale,x1,y1);
+        if(screenRotation==Surface.ROTATION_90){
+            matrix.postRotate(-90,x1,y1);
+        }else if(screenRotation==Surface.ROTATION_270){
+            matrix.postRotate(90,x1,y1);
+        }else if(screenRotation==Surface.ROTATION_180){
+            matrix.postRotate(-180,x1,y1);
+        }
+        return matrix;
+    }
+
 
     public String getMainCameraId() {
         try {
@@ -147,25 +177,34 @@ public class MainCameraModel {
         return null;
     }
 
-    public Size getClosestSupportedSize(Size parentSize, String cameraId, int OutputSizesFormat) {
+    public Size getOptimizedSize(Size maxiMumSize, String cameraId) {
         Size result = null;
         try {
             CameraCharacteristics chars = mCameraManager.getCameraCharacteristics(cameraId);
             StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             assert map != null;
-            Size[] sizes = map.getOutputSizes(OutputSizesFormat);
-            final float parentRatio=parentSize.getWidth() * 1.0f / parentSize.getHeight();
-            result = Collections.max(
-                    Arrays.asList(sizes),
+            Size[] sizes = map.getOutputSizes(ImageFormat.YUV_420_888);
+//            final float maximumRatio=maxiMumSize.getWidth() * 1.0f / maxiMumSize.getHeight();
+            showLog("max width= "+maxiMumSize.getWidth()+" max height= "+maxiMumSize.getHeight());
+            ArrayList<Size> bigEnough=new ArrayList<>();
+            for(Size temp:sizes){
+                int width = temp.getWidth();
+                int height = temp.getHeight();
+                showLog("sample with= "+width+" sample height= "+height);
+                if(width>=maxiMumSize.getWidth()&&height>=maxiMumSize.getHeight()){
+                    bigEnough.add(temp);
+                }
+            }
+            result = Collections.min(
+                    bigEnough,
                     new Comparator<Size>() {
                         @Override
                         public int compare(Size first, Size second) {
-                            float r1 = Math.abs(first.getWidth() * 1.0f / first.getHeight() - parentRatio);
-                            float r2 = Math.abs(second.getWidth() * 1.0f / second.getHeight() - parentRatio);
-                            return (int) (r2 - r1);
+                            return first.getWidth() * first.getHeight() - second.getWidth() * second.getHeight();
                         }
                     }
             );
+            showLog("result width="+result.getWidth()+" height="+result.getHeight());
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
