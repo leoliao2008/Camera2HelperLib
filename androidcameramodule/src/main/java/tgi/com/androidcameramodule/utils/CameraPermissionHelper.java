@@ -46,7 +46,8 @@ public class CameraPermissionHelper {
         }
     }
 
-    public void onRequestPermissionResult(final Activity activity, final int requestCode, String[] permissions, int[] results) {
+    public boolean onRequestPermissionResult(final Activity activity, final int requestCode, String[] permissions, int[] results) {
+        boolean isGranted=false;
         if(requestCode==mRequestCode){
             int len=permissions.length;
             for(int i=0;i<len;i++){
@@ -78,10 +79,14 @@ public class CameraPermissionHelper {
                                 requestCameraPermission(activity);
                             }
                         }
+                    }else {
+                        isGranted=true;
                     }
                 }
             }
         }
+
+        return isGranted;
 
     }
 

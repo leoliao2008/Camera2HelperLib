@@ -2,13 +2,20 @@ package tgi.com.androidcameramodule.fragment;
 
 import android.content.Context;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.ImageFormat;
 import android.graphics.Matrix;
+import android.graphics.Point;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
+import android.media.Image;
+import android.media.ImageReader;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
@@ -21,36 +28,55 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 
+import java.nio.ByteBuffer;
+import java.text.Format;
+
 import tgi.com.androidcameramodule.R;
-import tgi.com.androidcameramodule.callback.PreviewCallback;
+import tgi.com.androidcameramodule.callback.CameraCallback;
 import tgi.com.androidcameramodule.model.CameraModule;
 import tgi.com.androidcameramodule.utils.CameraPermissionHelper;
-import tgi.com.androidcameramodule.view.ICameraView;
 import tgi.com.androidcameramodule.widget.ResizableTextureView;
 
-public class CameraPreviewFragment extends Fragment implements ICameraView {
+public class CameraPreviewFragment extends Fragment{
     private ResizableTextureView mTextureView;
-    //    private CameraViewPresenter mPresenter;
     private CameraModule mModel;
     private SurfaceTexture mPreViewSurfaceTexture;
     private String mCameraId;
     private Handler mHandler;
     private CameraPermissionHelper mPermissionHelper;
-    private Matrix mMatrix;
     private Size mSize;
+    private HandlerThread mBackgroundThread;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         CameraManager manager = (CameraManager) getContext().getSystemService(Context.CAMERA_SERVICE);
-        mModel = new CameraModule(manager);
-        mHandler = new Handler();
+
+        mBackgroundThread = new HandlerThread("background thread");
+        mBackgroundThread.start();
+        mHandler = new Handler(mBackgroundThread.getLooper());
         mPermissionHelper = new CameraPermissionHelper(123);
-        boolean hasCameraPermission = mPermissionHelper.hasCameraPermission(getActivity());
-        if (!hasCameraPermission) {
-            mPermissionHelper.requestCameraPermission(getActivity());
-        }
+        mModel = new CameraModule(
+                manager,
+                new CameraCallback(){
+            @Override
+            public void onCameraOpen(CameraDevice camera) {
+                super.onCameraOpen(camera);
+                mCamera=camera;
+            }
+
+            @Override
+            public void onImageAvailable(Bitmap bitmap) {
+                super.onImageAvailable(bitmap);
+                showLog("image scanner got images! size="+bitmap.getByteCount());
+            }
+
+            @Override
+            public void onError(String errorMsg) {
+                super.onError(errorMsg);
+            }
+        },mHandler);
     }
 
     @Nullable
@@ -70,6 +96,15 @@ public class CameraPreviewFragment extends Fragment implements ICameraView {
     @Override
     public void onResume() {
         super.onResume();
+        boolean hasCameraPermission = mPermissionHelper.hasCameraPermission(getActivity());
+        if (!hasCameraPermission) {
+            mPermissionHelper.requestCameraPermission(getActivity());
+        }else {
+            initCameraPreview();
+        }
+    }
+
+    private void initCameraPreview() {
         if (!mTextureView.isAvailable()) {
             mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
                 @Override
@@ -81,9 +116,8 @@ public class CameraPreviewFragment extends Fragment implements ICameraView {
                 @Override
                 public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
                     int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
-                    Matrix matrix = mModel.adjustPreviewMatrixDueToRotation(width, height, mSize.getWidth(), mSize.getHeight(), rotation);
+                    Matrix matrix = mModel.getTransformMatrix(width, height, rotation, mSize);
                     mTextureView.setTransform(matrix);
-
                 }
 
                 @Override
@@ -113,7 +147,12 @@ public class CameraPreviewFragment extends Fragment implements ICameraView {
     }
 
     private void stopPreView() {
-        mCamera.close();
+        if(mCamera!=null){
+            mCamera.close();
+        }
+        if(mBackgroundThread!=null){
+            mBackgroundThread.quit();
+        }
     }
 
     @Override
@@ -131,54 +170,80 @@ public class CameraPreviewFragment extends Fragment implements ICameraView {
 
         int width = mTextureView.getWidth();
         int height = mTextureView.getHeight();
-        configureCameraOutput();
-        int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
-        Matrix matrix = mModel.adjustPreviewMatrixDueToRotation(width, height, mSize.getWidth(), mSize.getHeight(), rotation);
-        mTextureView.setTransform(matrix);
+        configureCameraOutput(width,height);
+
         try {
             mModel.openMainCamera(
                     mCameraId,
                     new Surface(mPreViewSurfaceTexture),
-                    new PreviewCallback() {
-                        @Override
-                        public void onCameraOpen(CameraDevice camera) {
-                            super.onCameraOpen(camera);
-                            mCamera = camera;
-                        }
-                    },
-                    null,
-                    mHandler
-            );
+                    mSize);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
     }
 
-    private void configureCameraOutput() {
-        mSize = mModel.getOptimizedSize(new Size(mTextureView.getWidth(), mTextureView.getHeight()), mCameraId);
-        int orientation = getResources().getConfiguration().orientation;
-        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            mTextureView.resize(mSize.getWidth(), mSize.getHeight());
-            mPreViewSurfaceTexture.setDefaultBufferSize(mTextureView.getHeight(), mTextureView.getWidth());
-        } else {
-            mTextureView.resize(mSize.getHeight(), mSize.getWidth());
-            mPreViewSurfaceTexture.setDefaultBufferSize(mTextureView.getWidth(), mTextureView.getHeight());
+    public void takePic(final TakePicListener listener){
+        mModel.takePic(
+                mCamera,
+                getActivity().getWindowManager().getDefaultDisplay().getRotation(),
+                new TakePicListener() {
+                    @Override
+                    public void onPictureTaken(final Bitmap pic) {
+                        getActivity().runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                listener.onPictureTaken(pic);
+                            }
+                        });
+                    }
+                }
+        );
+    }
+
+
+    private void configureCameraOutput(int textureWidth, int textureHeight) {
+        Point screenSize=new Point();
+        getActivity().getWindowManager().getDefaultDisplay().getSize(screenSize);
+        int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
+        boolean isLandscape = getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+        mSize=mModel.chooseOptimalPreviewSize(
+                textureWidth,
+                textureHeight,
+                mCameraId,
+                screenSize,
+                rotation
+        );
+        if(isLandscape){
+            mTextureView.setAspectRatio(mSize.getWidth(), mSize.getHeight());
+        }else {
+            mTextureView.setAspectRatio(mSize.getHeight(), mSize.getWidth());
         }
+        Matrix matrix = mModel.getTransformMatrix(textureWidth, textureHeight, rotation, mSize);
+        mTextureView.setTransform(matrix);
+        mPreViewSurfaceTexture.setDefaultBufferSize(mTextureView.getWidth(), mTextureView.getHeight());
     }
 
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        mPermissionHelper.onRequestPermissionResult(
+        boolean isGranted = mPermissionHelper.onRequestPermissionResult(
                 getActivity(),
                 requestCode,
                 permissions,
                 grantResults
         );
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if(isGranted){
+            initCameraPreview();
+        }else {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        }
     }
 
     private void showLog(String msg) {
         Log.e("preview fragment", msg);
+    }
+
+    public interface TakePicListener{
+        void onPictureTaken(Bitmap pic);
     }
 }

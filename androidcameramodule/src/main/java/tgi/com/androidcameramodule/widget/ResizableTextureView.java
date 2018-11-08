@@ -2,6 +2,7 @@ package tgi.com.androidcameramodule.widget;
 
 import android.content.Context;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.TextureView;
 
 public class ResizableTextureView extends TextureView {
@@ -22,7 +23,7 @@ public class ResizableTextureView extends TextureView {
         super(context, attrs, defStyleAttr);
     }
 
-    public void resize(int aspectWidth, int aspectHeight) throws IllegalArgumentException {
+    public void setAspectRatio(int aspectWidth, int aspectHeight) throws IllegalArgumentException {
         if (aspectWidth <= 0 || aspectHeight <= 0) {
             throw new IllegalArgumentException("Aspect value must be greater than 0!");
         }
@@ -35,16 +36,19 @@ public class ResizableTextureView extends TextureView {
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         int width = calculateDimension(widthMeasureSpec,DEFAULT_WITH);
         int height= calculateDimension(heightMeasureSpec,DEFAULT_HEIGHT);
+        showLog("before width="+width+" height="+height+" with/height="+width*1.0f/height);
         if (mTargetAspectWidth > 0 && mTargetAspectHeight > 0) {
             float currentRatio=width*1.f/height;
             float targetRatio= mTargetAspectWidth *1.f/ mTargetAspectHeight;
-            if(currentRatio<targetRatio){
-                width= (int) (height*1.f* mTargetAspectWidth / mTargetAspectHeight);
+            if(currentRatio>targetRatio){
+                height= (int) (width* mTargetAspectHeight*1.0f / mTargetAspectWidth);
+
             }else {
-                height= (int) (width*1.f* mTargetAspectHeight / mTargetAspectWidth);
+                width= (int) (height* mTargetAspectWidth*1.0f / mTargetAspectHeight);
             }
         }
         setMeasuredDimension(width,height);
+        showLog("after width="+width+" height="+height+" with/height="+width*1.0f/height);
     }
 
     private int calculateDimension(int measureSpec,int defaultValue) {
@@ -62,5 +66,9 @@ public class ResizableTextureView extends TextureView {
                 break;
         }
         return dimen;
+    }
+
+    private void showLog(String msg){
+//        Log.e(getClass().getSimpleName(),msg);
     }
 }
