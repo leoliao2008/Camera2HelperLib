@@ -1,1 +1,1 @@
-include ':app', ':androidcameramodule'
+include ':app', ':androidcameramodule', ':LibraryCameraTwo'

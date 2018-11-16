@@ -1,5 +1,7 @@
 package tgi.com.androidcamerademo;
 
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.support.v4.app.Fragment;
 import android.support.v7.app.AppCompatActivity;
@@ -17,6 +19,11 @@ public class MainActivity extends AppCompatActivity {
     private CameraPreviewFragment mFragment;
     private ImageView mImageView;
     private FrameLayout mFrameLayout;
+
+    public static void start(Context context) {
+        Intent starter = new Intent(context, MainActivity.class);
+        context.startActivity(starter);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {

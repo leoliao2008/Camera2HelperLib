@@ -51,7 +51,8 @@ public class CameraPreviewFragment extends Fragment{
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        CameraManager manager = (CameraManager) getContext().getSystemService(Context.CAMERA_SERVICE);
+        //in 5.0 there is a bug causing memory leak. use application context will prevent that leak.
+        CameraManager manager = (CameraManager) getContext().getApplicationContext().getSystemService(Context.CAMERA_SERVICE);
 
         mBackgroundThread = new HandlerThread("background thread");
         mBackgroundThread.start();
