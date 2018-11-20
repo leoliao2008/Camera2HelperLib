@@ -41,16 +41,17 @@ public class CameraView extends TextureView {
             float currentRatio=width*1.f/height;
             float targetRatio= mTargetAspectWidth *1.f/ mTargetAspectHeight;
             if(currentRatio>targetRatio){
-                height= (int) (width* mTargetAspectHeight*1.0f / mTargetAspectWidth);
-
+                height= (int) (width* mTargetAspectHeight*1.f / mTargetAspectWidth);
             }else {
-                width= (int) (height* mTargetAspectWidth*1.0f / mTargetAspectHeight);
+                width= (int) (height* mTargetAspectWidth*1.f / mTargetAspectHeight);
             }
         }
         setMeasuredDimension(width,height);
     }
 
-    private int calculateDimension(int measureSpec,int defaultValue) {
+
+
+    private int calculateDimension(int measureSpec, int defaultValue) {
         int mode = MeasureSpec.getMode(measureSpec);
         int dimen=-1;
         switch (mode) {

@@ -9,6 +9,14 @@ package tgi.com.librarycameratwo;
 public interface CameraViewConstant {
     int DEFAULT_VIEW_HEIGHT=400;
     int DEFAULT_VIEW_WIDTH=400;
+    /**
+     * Max preview width that is guaranteed by Camera2 API
+     */
+    int MAX_PREVIEW_WIDTH = 1920;
+    /**
+     * Max preview height that is guaranteed by Camera2 API
+     */
+    int MAX_PREVIEW_HEIGHT = 1080;
     String STAGE_READY_TO_TAKE_PICTURE = "STAGE_READY_TO_TAKE_PICTURE";
     String STAGE_IMAGE_HAS_BEEN_TAKEN = "STAGE_IMAGE_HAS_BEEN_TAKEN";
     String STAGE_YOU_SHOULD_START_PRECAPTURING = "STAGE_YOU_SHOULD_START_PRECAPTURING";

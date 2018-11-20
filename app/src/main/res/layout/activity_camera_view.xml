@@ -20,7 +20,8 @@
             android:id="@+id/activity_camera_view_iv_pic"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="gone"/>
+            android:visibility="gone"
+            android:scaleType="fitXY"/>
         <Button
             android:text="Swap"
             android:layout_width="wrap_content"
