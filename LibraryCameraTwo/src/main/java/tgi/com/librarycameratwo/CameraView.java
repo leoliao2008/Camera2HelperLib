@@ -67,6 +67,10 @@ public class CameraView extends TextureView {
         return dimen;
     }
 
+    public void takePicture(TakePicCallback callback){
+        mPresenter.takePic(callback);
+    }
+
     public void resize(int aspectWidth, int aspectHeight) throws IllegalArgumentException {
         if (aspectWidth <= 0 || aspectHeight <= 0) {
             throw new IllegalArgumentException("Aspect value must be greater than 0!");
@@ -81,6 +85,6 @@ public class CameraView extends TextureView {
     }
 
     public void handleError(Exception error) {
-
+        showLog(error.getMessage());
     }
 }

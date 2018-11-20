@@ -2,7 +2,6 @@ package tgi.com.librarycameratwo;
 
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CaptureRequest;
-import android.support.annotation.NonNull;
 
 /**
  * Author: leo
@@ -10,7 +9,7 @@ import android.support.annotation.NonNull;
  * Project: AndroidCameraDemo
  * Description:
  */
-public interface PreviewStateCallback {
-    void onConfigured(CameraCaptureSession session,CaptureRequest.Builder builder);
-    void onConfiguredFails(CameraCaptureSession session);
+public interface PreviewSessionCallback {
+    void onSessionEstablished(CaptureRequest.Builder builder, CameraCaptureSession session);
+    void onFailToEstablishSession();
 }

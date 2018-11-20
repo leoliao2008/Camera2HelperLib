@@ -1,22 +1,19 @@
 package tgi.com.librarycameratwo;
 
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
-import android.hardware.camera2.CaptureFailure;
 import android.hardware.camera2.CaptureRequest;
-import android.hardware.camera2.CaptureResult;
-import android.hardware.camera2.TotalCaptureResult;
 import android.media.ImageReader;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Process;
 import android.support.annotation.NonNull;
+import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
 import android.view.TextureView;
@@ -56,7 +53,7 @@ public class CameraPresenter {
     public void setSurfaceTextureListener() {
         mView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override
-            public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, final int height) {
+            public void onSurfaceTextureAvailable(final SurfaceTexture surface, int width, final int height) {
                 try {
                     boolean acquire = mLock.tryAcquire(2500, TimeUnit.MILLISECONDS);
                     if(!acquire){
@@ -80,36 +77,30 @@ public class CameraPresenter {
                                                 mView.getWidth(),
                                                 mView.getHeight(),
                                                 mCamera.getId());
-                                        mView.resize(optimalSize.getWidth(),optimalSize.getHeight());
+                                        mView.resize(600,800);
 
                                         mImageReader = ImageReader.newInstance(
-                                                optimalSize.getWidth(),
-                                                optimalSize.getHeight(),
+                                                600,
+                                                800,
                                                 ImageFormat.JPEG,
                                                 2
                                         );
-                                        mImageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
-                                            @Override
-                                            public void onImageAvailable(ImageReader reader) {
-                                                Bitmap image = mModel.getImageFromImageReader(reader);
-                                                //todo
-                                            }
-                                        },mHandler);
 
                                         mModel.startPreview(
                                                 mCamera,
-                                                Arrays.asList(new Surface(mView.getSurfaceTexture()),mImageReader.getSurface()),
-                                                new PreviewStateCallback(){
-
+                                                new Surface(surface),
+                                                Arrays.asList(new Surface(surface),mImageReader.getSurface()),
+                                                new PreviewSessionCallback(){
                                                     @Override
-                                                    public void onConfigured(CameraCaptureSession session, CaptureRequest.Builder builder) {
-                                                        mSession=session;
+                                                    public void onSessionEstablished(CaptureRequest.Builder builder, CameraCaptureSession session) {
+                                                        showLog("onSessionEstablished");
                                                         mRequestBuilder=builder;
+                                                        mSession=session;
                                                     }
 
                                                     @Override
-                                                    public void onConfiguredFails(CameraCaptureSession session) {
-                                                        mSession=null;
+                                                    public void onFailToEstablishSession() {
+                                                        showLog("onFailToEstablishSession");
                                                         closeCamera();
                                                     }
                                                 },mHandler);
@@ -166,9 +157,12 @@ public class CameraPresenter {
     }
 
     private void closeCamera() {
+        showLog("closeCamera");
         try {
             boolean acquire = mLock.tryAcquire(2500, TimeUnit.MILLISECONDS);
             if(acquire){
+                mRequestBuilder=null;
+
                 if(mSession!=null){
                     mSession.close();
                     mSession=null;
@@ -176,6 +170,10 @@ public class CameraPresenter {
                 if(mCamera!=null){
                     mCamera.close();
                     mCamera=null;
+                }
+                if(mImageReader!=null){
+                    mImageReader.close();
+                    mImageReader=null;
                 }
                 mHandlerThread.quitSafely();
             }
@@ -185,18 +183,19 @@ public class CameraPresenter {
         }
     }
 
-    public void takePic(ImageReader.OnImageAvailableListener listener){
+    public void takePic(TakePicCallback callback){
         if(mRequestBuilder==null||mSession==null){
             return;
         }
         try {
-            mModel.takePic(mRequestBuilder,mSession,new TakePicSateCallback(){
-
-            },mHandler);
+            mModel.takePic(mRequestBuilder,mSession,mImageReader,callback,mHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
             mView.handleError(e);
         }
+    }
 
+    private void showLog(String msg){
+        Log.e(getClass().getSimpleName(),msg);
     }
 }
