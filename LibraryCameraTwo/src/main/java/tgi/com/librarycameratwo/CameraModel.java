@@ -1,9 +1,6 @@
 package tgi.com.librarycameratwo;
 
 import android.annotation.SuppressLint;
-import android.app.Activity;
-import android.content.Context;
-import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
@@ -39,6 +36,8 @@ import java.util.Collections;
 import java.util.List;
 
 import static android.hardware.camera2.CameraMetadata.CONTROL_AE_STATE_PRECAPTURE;
+import static tgi.com.librarycameratwo.CameraViewConstant.MAX_PREVIEW_HEIGHT;
+import static tgi.com.librarycameratwo.CameraViewConstant.MAX_PREVIEW_WIDTH;
 import static tgi.com.librarycameratwo.CameraViewConstant.STAGE_IMAGE_HAS_BEEN_TAKEN;
 import static tgi.com.librarycameratwo.CameraViewConstant.STAGE_LOCKING_FOCUS;
 import static tgi.com.librarycameratwo.CameraViewConstant.STAGE_PRECAPTURING_HAS_BEEN_STARTED;
@@ -57,28 +56,15 @@ import static tgi.com.librarycameratwo.CameraViewConstant.STAGE_YOU_SHOULD_START
 public class CameraModel {
     private CameraManager mManager;
     private String mCurrentStage = CameraViewConstant.STAGE_PREVIEWING;
-    /**
-     * Max preview width that is guaranteed by Camera2 API
-     */
-    private static final int MAX_PREVIEW_WIDTH = 1920;
-
-    /**
-     * Max preview height that is guaranteed by Camera2 API
-     */
-    private static final int MAX_PREVIEW_HEIGHT = 1080;
-    private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
-    static {
-        ORIENTATIONS.append(Surface.ROTATION_0, 90);
-        ORIENTATIONS.append(Surface.ROTATION_90, 0);
-        ORIENTATIONS.append(Surface.ROTATION_180, 270);
-        ORIENTATIONS.append(Surface.ROTATION_270, 180);
-    }
-
-    private Integer mSensorOrientation;
-
+    private SparseIntArray mOrientations;
 
     public CameraModel(CameraManager cameraManager) {
         mManager = cameraManager;
+        mOrientations = new SparseIntArray();
+        mOrientations.append(Surface.ROTATION_0, 90);
+        mOrientations.append(Surface.ROTATION_90, 0);
+        mOrientations.append(Surface.ROTATION_180, 270);
+        mOrientations.append(Surface.ROTATION_270, 180);
     }
 
     public String getFrontCamera() throws CameraAccessException {
@@ -108,38 +94,35 @@ public class CameraModel {
 
     @SuppressLint("MissingPermission")
     public void openCamera(String cameraId, CameraDevice.StateCallback callback, Handler handler) throws CameraAccessException {
-
         mManager.openCamera(cameraId, callback, handler);
     }
 
 
-    public Size getOptimalPreviewSize(int originPreviewWidth, int originPreviewHeight, String cameraId)
-            throws CameraAccessException {
-        StreamConfigurationMap map = mManager
-                .getCameraCharacteristics(cameraId)
-                .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-        Size[] sizes = map.getOutputSizes(ImageFormat.JPEG);
-        float originRatio = originPreviewWidth * 1.0f / originPreviewHeight;
-        //todo     for now it will do, but must be improved later
-        return Collections.max(
-                Arrays.asList(sizes),
-                new OptimalAspectRatioComparator(originRatio)
-        );
-    }
+    //    public Size getOptimalPreviewSize(int originPreviewWidth, int originPreviewHeight, String cameraId)
+    //            throws CameraAccessException {
+    //        StreamConfigurationMap map = mManager
+    //                .getCameraCharacteristics(cameraId)
+    //                .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+    //        Size[] sizes = map.getOutputSizes(ImageFormat.JPEG);
+    //        float originRatio = originPreviewWidth * 1.0f / originPreviewHeight;
+    //        //todo     for now it will do, but must be improved later
+    //        return Collections.max(
+    //                Arrays.asList(sizes),
+    //                new OptimalAspectRatioComparator(originRatio)
+    //        );
+    //    }
 
 
     /**
-     *
      * @param camera
      * @param previewSurface 用来展示preview画面的surface
-     * @param outputs 一组surface，对应不同的request，在请求前必须先把surface放进这里。
+     * @param outputs        一组surface，对应不同的request，在请求前必须先把surface放进这里。
      * @param callback
      * @param handler
      * @throws CameraAccessException
      */
     public void startPreview(final CameraDevice camera, final Surface previewSurface, final List<Surface> outputs,
                              final PreviewSessionCallback callback, final Handler handler) throws CameraAccessException {
-        mSensorOrientation = mManager.getCameraCharacteristics(camera.getId()).get(CameraCharacteristics.SENSOR_ORIENTATION);
         camera.createCaptureSession(
                 outputs,
                 new CameraCaptureSession.StateCallback() {
@@ -154,8 +137,8 @@ public class CameraModel {
                             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
 
 
-                            session.setRepeatingRequest(builder.build(),null, handler);
-                            callback.onSessionEstablished(builder,session);
+                            session.setRepeatingRequest(builder.build(), null, handler);
+                            callback.onSessionEstablished(builder, session);
                         } catch (CameraAccessException e) {
                             e.printStackTrace();
                             callback.onFailToEstablishSession();
@@ -173,7 +156,7 @@ public class CameraModel {
 
     }
 
-    private Size setUpCameraOutputs(Display display,String cameraId,int width, int height) throws CameraAccessException {
+    public Size getOptimalSize(Display display, String cameraId, int textureViewWidth, int textureViewHeight) throws CameraAccessException {
         // For still image captures, we use the largest available size.
         StreamConfigurationMap map = mManager
                 .getCameraCharacteristics(cameraId)
@@ -187,18 +170,18 @@ public class CameraModel {
         // coordinate.
         int displayRotation = display.getRotation();
         //noinspection ConstantConditions
-        mSensorOrientation = mManager.getCameraCharacteristics(cameraId).get(CameraCharacteristics.SENSOR_ORIENTATION);
+        Integer sensorOrientation = mManager.getCameraCharacteristics(cameraId).get(CameraCharacteristics.SENSOR_ORIENTATION);
         boolean swappedDimensions = false;
         switch (displayRotation) {
             case Surface.ROTATION_0:
             case Surface.ROTATION_180:
-                if (mSensorOrientation == 90 || mSensorOrientation == 270) {
+                if (sensorOrientation == 90 || sensorOrientation == 270) {
                     swappedDimensions = true;
                 }
                 break;
             case Surface.ROTATION_90:
             case Surface.ROTATION_270:
-                if (mSensorOrientation == 0 || mSensorOrientation == 180) {
+                if (sensorOrientation == 0 || sensorOrientation == 180) {
                     swappedDimensions = true;
                 }
                 break;
@@ -208,14 +191,14 @@ public class CameraModel {
 
         Point displaySize = new Point();
         display.getSize(displaySize);
-        int rotatedPreviewWidth = width;
-        int rotatedPreviewHeight = height;
+        int rotatedPreviewWidth = textureViewWidth;
+        int rotatedPreviewHeight = textureViewHeight;
         int maxPreviewWidth = displaySize.x;
         int maxPreviewHeight = displaySize.y;
 
         if (swappedDimensions) {
-            rotatedPreviewWidth = height;
-            rotatedPreviewHeight = width;
+            rotatedPreviewWidth = textureViewHeight;
+            rotatedPreviewHeight = textureViewWidth;
             maxPreviewWidth = displaySize.y;
             maxPreviewHeight = displaySize.x;
         }
@@ -235,15 +218,6 @@ public class CameraModel {
                 rotatedPreviewWidth, rotatedPreviewHeight, maxPreviewWidth,
                 maxPreviewHeight, largest);
 
-        // We fit the aspect ratio of TextureView to the size of preview we picked.
-//        int orientation = getResources().getConfiguration().orientation;
-//        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-//            mTextureView.setAspectRatio(
-//                    mPreviewSize.getWidth(), mPreviewSize.getHeight());
-//        } else {
-//            mTextureView.setAspectRatio(
-//                    mPreviewSize.getHeight(), mPreviewSize.getWidth());
-//        }
     }
 
     private static Size chooseOptimalSize(Size[] choices, int textureViewWidth,
@@ -279,13 +253,11 @@ public class CameraModel {
     }
 
 
-
-    private Matrix configureTransform(Display display,int surfaceViewWidth,
-                                      int surfaceViewHeight,Size optimalPreviewSize) {
-        //todo this is for reset matrix for surface view
+    private Matrix configureTransform(Display display, int txtureViewWidth,
+                                      int txtureViewHeight, Size optimalPreviewSize) {
         int rotation = display.getRotation();
         Matrix matrix = new Matrix();
-        RectF viewRect = new RectF(0, 0, surfaceViewWidth, surfaceViewHeight);
+        RectF viewRect = new RectF(0, 0, txtureViewWidth, txtureViewHeight);
         RectF bufferRect = new RectF(0, 0, optimalPreviewSize.getHeight(), optimalPreviewSize.getWidth());
         float centerX = viewRect.centerX();
         float centerY = viewRect.centerY();
@@ -293,8 +265,8 @@ public class CameraModel {
             bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
             matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
             float scale = Math.max(
-                    (float) surfaceViewHeight / optimalPreviewSize.getHeight(),
-                    (float) surfaceViewWidth / optimalPreviewSize.getWidth());
+                    (float) txtureViewHeight / optimalPreviewSize.getHeight(),
+                    (float) txtureViewWidth / optimalPreviewSize.getWidth());
             matrix.postScale(scale, scale, centerX, centerY);
             matrix.postRotate(90 * (rotation - 2), centerX, centerY);
         } else if (Surface.ROTATION_180 == rotation) {
@@ -321,13 +293,14 @@ public class CameraModel {
             public void onImageAvailable(ImageReader reader) {
                 showLog("onImageAvailable");
                 Bitmap image = getImageFromImageReader(reader);
-                if(image!=null){
+                if (image != null) {
                     callback.onImageTaken(image);
-                }else {
+                    imageReader.setOnImageAvailableListener(null,null );
+                } else {
                     callback.onError(new Exception("Image is taken but empty."));
                 }
                 //do not setOnImageAvailableListener(null,null) here, will cause subsequent pics fail to take.
-//                imageReader.setOnImageAvailableListener(null,null);
+                //                imageReader.setOnImageAvailableListener(null,null);
             }
         }, handler);
         session.setRepeatingRequest(
@@ -338,6 +311,7 @@ public class CameraModel {
                                                  @NonNull CaptureRequest request, long timestamp, long frameNumber) {
                         super.onCaptureStarted(session, request, timestamp, frameNumber);
                         showLog("onCaptureStarted:");
+                        process(session, request, null);
                     }
 
                     @Override
@@ -345,7 +319,6 @@ public class CameraModel {
                                                     @NonNull CaptureRequest request, @NonNull CaptureResult partialResult) {
                         super.onCaptureProgressed(session, request, partialResult);
                         showLog("onCaptureProgressed:");
-                        //this is the beginning of the process
                         process(session, request, partialResult);
                     }
 
@@ -353,7 +326,6 @@ public class CameraModel {
                     public void onCaptureCompleted(@NonNull CameraCaptureSession session,
                                                    @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                         super.onCaptureCompleted(session, request, result);
-                        mCurrentStage = STAGE_IMAGE_HAS_BEEN_TAKEN;
                         showLog("onCaptureCompleted:");
                         process(session, request, result);
 
@@ -364,7 +336,7 @@ public class CameraModel {
                                                 @NonNull CaptureRequest request, @NonNull CaptureFailure failure) {
                         super.onCaptureFailed(session, request, failure);
                         showLog("onCaptureFailed:");
-                        process(session,request,null);
+//                        process(session, request, null);
                     }
 
                     private void process(@NonNull CameraCaptureSession session,
@@ -417,7 +389,7 @@ public class CameraModel {
         builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START);
         session.stopRepeating();
         session.abortCaptures();
-        session.capture(
+        session.setRepeatingRequest(
                 builder.build(),
                 callback,
                 handler
@@ -429,7 +401,9 @@ public class CameraModel {
                                  CameraCaptureSession.CaptureCallback captureCallback, Handler handler)
             throws CameraAccessException {
         builder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_START);
-        session.capture(
+        session.stopRepeating();
+        session.abortCaptures();
+        session.setRepeatingRequest(
                 builder.build(),
                 captureCallback,
                 handler
@@ -454,11 +428,13 @@ public class CameraModel {
     private void captureStillPic(CameraCaptureSession session, ImageReader imageReader,
                                  CameraCaptureSession.CaptureCallback captureCallback, Handler handler)
             throws CameraAccessException {
+        showLog("captureStillPic");
         CameraDevice device = session.getDevice();
         CaptureRequest.Builder builder = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
         builder.addTarget(imageReader.getSurface());
         builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
         builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
+        builder.set(CaptureRequest.JPEG_ORIENTATION, 90);
         session.stopRepeating();
         session.abortCaptures();
         session.capture(
@@ -466,21 +442,22 @@ public class CameraModel {
                 captureCallback,
                 handler
         );
+        mCurrentStage = STAGE_IMAGE_HAS_BEEN_TAKEN;
     }
 
-    /**
-     * https://stackoverflow.com/questions/48406497/camera2-understanding-the-sensor-and-device-orientations
-     * @param rotation
-     * @return
-     */
-    private int getJpegOrientation(int rotation) {
-        // Sensor orientation is 90 for most devices, or 270 for some devices (eg. Nexus 5X)
-        // We have to take that into account and rotate JPEG properly.
-        // For devices with orientation of 90, we simply return our mapping from ORIENTATIONS.
-        // For devices with orientation of 270, we need to rotate the JPEG 180 degrees.
-
-        return (ORIENTATIONS.get(rotation) + mSensorOrientation + 270) % 360;
-    }
+    //    /**
+    //     * https://stackoverflow.com/questions/48406497/camera2-understanding-the-sensor-and-device-orientations
+    //     * @param rotation
+    //     * @return
+    //     */
+    //    private int getJpegOrientation(int rotation) {
+    //        // Sensor orientation is 90 for most devices, or 270 for some devices (eg. Nexus 5X)
+    //        // We have to take that into account and rotate JPEG properly.
+    //        // For devices with orientation of 90, we simply return our mapping from mOrientations.
+    //        // For devices with orientation of 270, we need to rotate the JPEG 180 degrees.
+    //
+    //        return (mOrientations.get(rotation) + mSensorOrientation + 270) % 360;
+    //    }
 
 
     /**
@@ -491,9 +468,9 @@ public class CameraModel {
      * @param partialResult
      * @return
      */
-    private String whatStageNow(@Nullable CaptureResult partialResult) {
-        showLog("whatStageNow begin state: "+mCurrentStage);
-        if(partialResult==null){
+    private synchronized String whatStageNow(@Nullable CaptureResult partialResult) {
+        showLog("whatStageNow begin state: " + mCurrentStage);
+        if (partialResult == null) {
             return mCurrentStage;
         }
         Integer afState = partialResult.get(CaptureResult.CONTROL_AF_STATE);
@@ -520,11 +497,11 @@ public class CameraModel {
                 }
             }
         }
-        showLog("whatStageNow end stage:"+mCurrentStage);
+        showLog("whatStageNow end stage:" + mCurrentStage);
         return mCurrentStage;
     }
 
-    private void showLog(String msg){
-        Log.e(getClass().getSimpleName(),msg);
+    private void showLog(String msg) {
+        Log.e(getClass().getSimpleName(), msg);
     }
 }

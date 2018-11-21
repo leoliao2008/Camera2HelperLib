@@ -1,6 +1,7 @@
 package tgi.com.librarycameratwo;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
@@ -34,7 +35,7 @@ public class CameraPresenter {
     private CameraManager mCameraManager;
     private HandlerThread mHandlerThread;
     private Handler mHandler;
-    private Semaphore mLock=new Semaphore(1);//this is a thread safe lock to guarantee open camera/close camera are not executed simultaneously
+    private Semaphore mLock = new Semaphore(1);//this is a thread safe lock to guarantee open camera/close camera are not executed simultaneously
     private CameraDevice mCamera;
     private CameraCaptureSession mSession;
     private CaptureRequest.Builder mRequestBuilder;
@@ -43,11 +44,11 @@ public class CameraPresenter {
 
     public CameraPresenter(CameraView view) {
         mView = view;
-        mCameraManager= (CameraManager) view.getContext().getApplicationContext().getSystemService(Context.CAMERA_SERVICE);
-        mModel=new CameraModel(mCameraManager);
+        mCameraManager = (CameraManager) view.getContext().getApplicationContext().getSystemService(Context.CAMERA_SERVICE);
+        mModel = new CameraModel(mCameraManager);
         mHandlerThread = new HandlerThread("CameraViewHandlerThread", Process.THREAD_PRIORITY_BACKGROUND);
         mHandlerThread.start();
-        mHandler=new Handler(mHandlerThread.getLooper());
+        mHandler = new Handler(mHandlerThread.getLooper());
     }
 
     public void setSurfaceTextureListener() {
@@ -56,7 +57,7 @@ public class CameraPresenter {
             public void onSurfaceTextureAvailable(final SurfaceTexture surface, int width, final int height) {
                 try {
                     boolean acquire = mLock.tryAcquire(2500, TimeUnit.MILLISECONDS);
-                    if(!acquire){
+                    if (!acquire) {
                         mView.handleError(new Exception("Camera is not available. Operation abort."));
                         return;
                     }
@@ -71,31 +72,45 @@ public class CameraPresenter {
                                 @Override
                                 public void onOpened(@NonNull CameraDevice camera) {
                                     mLock.release();
-                                    mCamera=camera;
+                                    mCamera = camera;
                                     try {
-                                        Size optimalSize = mModel.getOptimalPreviewSize(
-                                                mView.getWidth(),
-                                                mView.getHeight(),
-                                                mCamera.getId());
-                                        mView.resize(600,800);
-
-                                        mImageReader = ImageReader.newInstance(
-                                                600,
-                                                800,
+//                                        Size optimalSize = mModel.getOptimalSize(
+//                                                mView.getDisplay(),
+//                                                mCamera.getId(),
+//                                                mView.getWidth(),
+//                                                mView.getHeight());
+//                                        int orientation = mView.getResources().getConfiguration().orientation;
+//                                        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+//                                            mView.resize(optimalSize.getWidth(),optimalSize.getHeight() );
+//                                        } else {
+//                                            mView.resize(optimalSize.getHeight(),optimalSize.getWidth() );
+//                                        }
+//
+//                                        mImageReader = ImageReader.newInstance(
+//                                                optimalSize.getWidth(),
+//                                                optimalSize.getHeight(),
+//                                                ImageFormat.JPEG,
+//                                                2
+//                                        );
+                                        mImageReader=ImageReader.newInstance(
+                                                1024,
+                                                726,
                                                 ImageFormat.JPEG,
-                                                2
+                                                1
                                         );
+                                        surface.setDefaultBufferSize(1024,768 );
+                                        mView.resize(1024,768 );
 
                                         mModel.startPreview(
                                                 mCamera,
                                                 new Surface(surface),
-                                                Arrays.asList(new Surface(surface),mImageReader.getSurface()),
-                                                new PreviewSessionCallback(){
+                                                Arrays.asList(new Surface(surface), mImageReader.getSurface()),
+                                                new PreviewSessionCallback() {
                                                     @Override
                                                     public void onSessionEstablished(CaptureRequest.Builder builder, CameraCaptureSession session) {
                                                         showLog("onSessionEstablished");
-                                                        mRequestBuilder=builder;
-                                                        mSession=session;
+                                                        mRequestBuilder = builder;
+                                                        mSession = session;
                                                     }
 
                                                     @Override
@@ -103,7 +118,7 @@ public class CameraPresenter {
                                                         showLog("onFailToEstablishSession");
                                                         closeCamera();
                                                     }
-                                                },mHandler);
+                                                }, mHandler);
 
                                     } catch (CameraAccessException e) {
                                         e.printStackTrace();
@@ -121,7 +136,7 @@ public class CameraPresenter {
                                 public void onError(@NonNull CameraDevice camera, int error) {
                                     closeCamera();
                                     mView.handleError(new Exception("Critical Error when trying to " +
-                                            "open camera: "+camera.getId()+" error code: "+error));
+                                            "open camera: " + camera.getId() + " error code: " + error));
                                 }
 
                                 @Override
@@ -156,24 +171,24 @@ public class CameraPresenter {
         });
     }
 
-    private void closeCamera() {
+    public void closeCamera() {
         showLog("closeCamera");
         try {
             boolean acquire = mLock.tryAcquire(2500, TimeUnit.MILLISECONDS);
-            if(acquire){
-                mRequestBuilder=null;
+            if (acquire) {
+                mRequestBuilder = null;
 
-                if(mSession!=null){
+                if (mSession != null) {
                     mSession.close();
-                    mSession=null;
+                    mSession = null;
                 }
-                if(mCamera!=null){
+                if (mCamera != null) {
                     mCamera.close();
-                    mCamera=null;
+                    mCamera = null;
                 }
-                if(mImageReader!=null){
+                if (mImageReader != null) {
                     mImageReader.close();
-                    mImageReader=null;
+                    mImageReader = null;
                 }
                 mHandlerThread.quitSafely();
             }
@@ -183,19 +198,19 @@ public class CameraPresenter {
         }
     }
 
-    public void takePic(TakePicCallback callback){
-        if(mRequestBuilder==null||mSession==null){
+    public void takePic(TakePicCallback callback) {
+        if (mRequestBuilder == null || mSession == null) {
             return;
         }
         try {
-            mModel.takePic(mRequestBuilder,mSession,mImageReader,callback,mHandler);
+            mModel.takePic(mRequestBuilder, mSession, mImageReader, callback, mHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
             mView.handleError(e);
         }
     }
 
-    private void showLog(String msg){
-        Log.e(getClass().getSimpleName(),msg);
+    private void showLog(String msg) {
+        Log.e(getClass().getSimpleName(), msg);
     }
 }
