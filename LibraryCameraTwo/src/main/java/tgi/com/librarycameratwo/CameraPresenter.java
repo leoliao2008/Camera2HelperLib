@@ -1,6 +1,7 @@
 package tgi.com.librarycameratwo;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
@@ -20,7 +21,6 @@ import android.view.OrientationEventListener;
 import android.view.Surface;
 import android.view.TextureView;
 
-import java.util.Arrays;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
  * Project: AndroidCameraDemo
  * Description:
  */
-public class CameraPresenter {
+class CameraPresenter {
     private CameraView mView;
     private CameraModel mModel;
     private CameraManager mCameraManager;
@@ -40,13 +40,14 @@ public class CameraPresenter {
     private CameraDevice mCamera;
     private CameraCaptureSession mSession;
     private CaptureRequest.Builder mRequestBuilder;
-    private ImageReader mImageReader;
+    private ImageReader mStillPictureReader;
     private OrientationEventListener mOrientationEventListener;
     private Integer mSensorOrientation;
     private Size mOptimalSize;
+    private ImageReader mDynamicPictureReader;
 
 
-    public CameraPresenter(CameraView view) {
+    CameraPresenter(CameraView view) {
         mView = view;
         mCameraManager = (CameraManager) view.getContext().getApplicationContext().getSystemService(Context.CAMERA_SERVICE);
         mModel = new CameraModel(mCameraManager);
@@ -56,18 +57,18 @@ public class CameraPresenter {
     }
 
 
-    public void onAttachedToWindow() {
-        if(!mView.isAvailable()){
+    void onAttachedToWindow() {
+        if (!mView.isAvailable()) {
             setSurfaceTextureListener();
-        }else {
+        } else {
             openCamera(mView.getSurfaceTexture());
         }
     }
 
-    public void onDetachedFromWindow(){
-        if(mOrientationEventListener!=null){
+    void onDetachedFromWindow() {
+        if (mOrientationEventListener != null) {
             mOrientationEventListener.disable();
-            mOrientationEventListener=null;
+            mOrientationEventListener = null;
         }
         closeCamera();
     }
@@ -77,7 +78,7 @@ public class CameraPresenter {
         mView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override
             public void onSurfaceTextureAvailable(final SurfaceTexture surface, int width, final int height) {
-                openCamera(surface);
+                openCamera(mView.getSurfaceTexture());
             }
 
             @Override
@@ -118,13 +119,14 @@ public class CameraPresenter {
                             try {
                                 mLock.release();
                                 mCamera = camera;
-                                mSensorOrientation=mModel.getCameraSensorOrientation(camera);
-                                showLog("sensor orientation is: "+mSensorOrientation);
+                                mSensorOrientation = mModel.getCameraSensorOrientation(camera);
+                                showLog("sensor orientation is: " + mSensorOrientation);
 
                                 mOptimalSize = mModel.chooseOptimalSize(
                                         mModel.getCameraCharacteristics(mCamera),
                                         CameraViewConstant.DESIRED_PREVIEW_SIZE.getWidth(),
                                         CameraViewConstant.DESIRED_PREVIEW_SIZE.getHeight());
+
 
                                 // We fit the aspect ratio of TextureView to the size of preview we picked.
                                 int rotation = mView.getDisplay().getRotation();
@@ -141,24 +143,41 @@ public class CameraPresenter {
                                     }
                                 });
 
-                                if (rotation == Surface.ROTATION_90||rotation==Surface.ROTATION_270) {
+                                if (rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270) {
                                     mView.resize(mOptimalSize.getWidth(), mOptimalSize.getHeight());
                                 } else {
                                     mView.resize(mOptimalSize.getHeight(), mOptimalSize.getWidth());
                                 }
-                                surface.setDefaultBufferSize(mOptimalSize.getWidth(), mOptimalSize.getHeight() );
+                                surface.setDefaultBufferSize(mOptimalSize.getWidth(), mOptimalSize.getHeight());
 
-                                mImageReader=ImageReader.newInstance(
+                                mStillPictureReader = ImageReader.newInstance(
                                         mOptimalSize.getWidth(),
                                         mOptimalSize.getHeight(),
                                         ImageFormat.JPEG,
                                         2
                                 );
 
+
+                                mDynamicPictureReader = ImageReader.newInstance(
+                                        mOptimalSize.getWidth(),
+                                        mOptimalSize.getHeight(),
+                                        ImageFormat.YUV_420_888,
+                                        2);
+                                mDynamicPictureReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+                                    @Override
+                                    public void onImageAvailable(ImageReader imageReader) {
+                                        showLog("mDynamicPictureReader got image!!!!");
+                                        imageReader.acquireLatestImage().close();
+                                    }
+                                }, mHandler);
+
+                                Surface preViewSurface = new Surface(surface);
+
                                 mModel.startPreview(
                                         mCamera,
-                                        new Surface(surface),
-                                        Arrays.asList(new Surface(surface), mImageReader.getSurface()),
+                                        preViewSurface,
+                                        mStillPictureReader.getSurface(),
+                                        mDynamicPictureReader.getSurface(),
                                         new PreviewSessionCallback() {
                                             @Override
                                             public void onSessionEstablished(CaptureRequest.Builder builder, CameraCaptureSession session) {
@@ -208,7 +227,6 @@ public class CameraPresenter {
     }
 
 
-
     private void closeCamera() {
         showLog("closeCamera");
         try {
@@ -224,9 +242,13 @@ public class CameraPresenter {
                     mCamera.close();
                     mCamera = null;
                 }
-                if (mImageReader != null) {
-                    mImageReader.close();
-                    mImageReader = null;
+                if (mStillPictureReader != null) {
+                    mStillPictureReader.close();
+                    mStillPictureReader = null;
+                }
+                if(mDynamicPictureReader!=null){
+                    mDynamicPictureReader.close();
+                    mDynamicPictureReader=null;
                 }
                 mHandlerThread.quitSafely();
             }
@@ -236,22 +258,45 @@ public class CameraPresenter {
         }
     }
 
-    public void takePic(TakePicCallback callback) {
+    void takePic(TakePicCallback callback) {
         if (mRequestBuilder == null || mSession == null) {
             return;
         }
         mModel.takePic(
                 mRequestBuilder,
                 mSession,
-                mImageReader,
+                mStillPictureReader,
                 mView.getDisplay().getRotation(),
                 mSensorOrientation,
                 callback,
                 mHandler);
     }
 
+    void enableDynamicImageProcessing(final DynamicImageCaptureCallback callback){
+        if(mDynamicPictureReader!=null){
+            mDynamicPictureReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+                @Override
+                public void onImageAvailable(ImageReader imageReader) {
+                    Bitmap image = mModel.getImageFromImageReader(imageReader);
+                    callback.onGetDynamicImage(image);
+                }
+            }, mHandler);
+        }
+    }
+
+    void disableDynamicImageProcessing(){
+        if(mDynamicPictureReader!=null){
+            mDynamicPictureReader.setOnImageAvailableListener(null, null);
+        }
+    }
+
     private void showLog(String msg) {
         Log.e(getClass().getSimpleName(), msg);
+    }
+
+    public interface DynamicImageCaptureCallback{
+        void onGetDynamicImage(Bitmap image);
+
     }
 
 

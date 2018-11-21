@@ -91,7 +91,7 @@ public class CameraModel {
     private int mState;
 
 
-    public CameraModel(CameraManager cameraManager) {
+    CameraModel(CameraManager cameraManager) {
         mManager = cameraManager;
         mOrientationMapping = new SparseIntArray();
         mOrientationMapping.append(Surface.ROTATION_0, 90);
@@ -113,7 +113,7 @@ public class CameraModel {
 
     }
 
-    public String getRearCamera() throws CameraAccessException {
+    String getRearCamera() throws CameraAccessException {
         String[] cameraIdList = mManager.getCameraIdList();
         for (String id : cameraIdList) {
             CameraCharacteristics chars = mManager.getCameraCharacteristics(id);
@@ -126,7 +126,7 @@ public class CameraModel {
     }
 
     @SuppressLint("MissingPermission")
-    public void openCamera(String cameraId, CameraDevice.StateCallback callback, Handler handler) throws CameraAccessException {
+    void openCamera(String cameraId, CameraDevice.StateCallback callback, Handler handler) throws CameraAccessException {
         mManager.openCamera(cameraId, callback, handler);
     }
 
@@ -138,7 +138,7 @@ public class CameraModel {
      * @param minHeight The minimum desired minHeight
      * @return The optimal {@code Size}, or an arbitrary one if none were big enough
      */
-    public Size chooseOptimalSize(CameraCharacteristics chars, int minWidth, int minHeight) {
+    Size chooseOptimalSize(CameraCharacteristics chars, int minWidth, int minHeight) {
         StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
         Size[] choices = map.getOutputSizes(SurfaceTexture.class);
         int minSize = Math.max(Math.min(minWidth, minHeight), CameraViewConstant.MINIMUM_PREVIEW_SIZE);
@@ -180,7 +180,7 @@ public class CameraModel {
      * @param textureViewFormerWidth  The width of `mTextureView`
      * @param textureViewFormerHeight The height of `mTextureView`
      */
-    public Matrix getTransformMatrix(
+    Matrix getTransformMatrix(
             int deviceRotation,
             int textureViewFormerWidth,
             int textureViewFormerHeight,
@@ -209,22 +209,29 @@ public class CameraModel {
     /**
      * @param camera
      * @param previewSurface 用来展示preview画面的surface
-     * @param outputs        一组surface，对应不同的request，在请求前必须先把surface放进这里。
      * @param callback
      * @param handler
      * @throws CameraAccessException
      */
-    public void startPreview(final CameraDevice camera, final Surface previewSurface, final List<Surface> outputs,
-                             final PreviewSessionCallback callback, final Handler handler) throws CameraAccessException {
+    void startPreview(final CameraDevice camera,
+                      final Surface previewSurface,
+                      Surface stillPicCaptureSurface,
+                      final Surface dynamicImageCaptureSurface,
+                      final PreviewSessionCallback callback, final Handler handler) throws CameraAccessException {
         camera.createCaptureSession(
-                outputs,
+                Arrays.asList(previewSurface,stillPicCaptureSurface,dynamicImageCaptureSurface),
                 new CameraCaptureSession.StateCallback() {
                     @Override
                     public void onConfigured(@NonNull CameraCaptureSession session) {
                         try {
-                            //这里有坑，target一次只能有一个，如果设置两个以上会非常卡顿。
+                            //这里有坑，之前以为：target一次只能有一个，如果设置两个以上会非常卡顿。
+                            //但实际上：previewSurface输入的是textureSurface的surface,它会自动处理掉接受到的image，使其自动close()，循环使用。
+                            //然而其它的target接受到image后，
+                            //并不会自动处理掉image，不会调用image.close()，因此最初几个图像被接收后，后面的会卡住。
+                            //正确的做法是每个surface被addTarget()前，先设置onImageAvailableListener，在回调中手动处理image即可。
                             CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
                             builder.addTarget(previewSurface);
+                            builder.addTarget(dynamicImageCaptureSurface);
 
                             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
                             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
@@ -250,7 +257,7 @@ public class CameraModel {
     }
 
 
-    private Bitmap getImageFromImageReader(ImageReader reader) {
+    Bitmap getImageFromImageReader(ImageReader reader) {
         Image image = reader.acquireLatestImage();
         ByteBuffer buffer = image.getPlanes()[0].getBuffer();
         byte[] data = new byte[buffer.remaining()];
@@ -260,9 +267,9 @@ public class CameraModel {
     }
 
 
-    public void takePic(final CaptureRequest.Builder builder, final CameraCaptureSession session,
-                        final ImageReader imageReader, final int deviceRotation,
-                        final Integer sensorOrientation, final TakePicCallback callback,final Handler handler) {
+    void takePic(final CaptureRequest.Builder builder, final CameraCaptureSession session,
+                 final ImageReader imageReader, final int deviceRotation,
+                 final Integer sensorOrientation, final TakePicCallback callback, final Handler handler) {
         //先设置获取图片后的回调。
         imageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
             @Override
@@ -281,8 +288,6 @@ public class CameraModel {
                     Bitmap bitmap = Bitmap.createBitmap(h1, w1,image.getConfig());
                     int w2 = bitmap.getWidth();
                     int h2 = bitmap.getHeight();
-                    showLog("trans x="+(w2-w1));
-                    showLog("trans y="+(h2-h1));
                     matrix.postTranslate((w2-w1)/2,(h2-h1)/2);
                     Canvas canvas=new Canvas(bitmap);
                     canvas.drawBitmap(image,matrix,new Paint());
@@ -307,8 +312,6 @@ public class CameraModel {
                                     builder,
                                     session,
                                     imageReader,
-                                    deviceRotation,
-                                    sensorOrientation,
                                     this,
                                     handler);
                         } else if (CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED == afState ||
@@ -322,8 +325,6 @@ public class CameraModel {
                                         builder,
                                         session,
                                         imageReader,
-                                        deviceRotation,
-                                        sensorOrientation,
                                         this,
                                         handler);
                             } else {
@@ -355,8 +356,6 @@ public class CameraModel {
                                     builder,
                                     session,
                                     imageReader,
-                                    deviceRotation,
-                                    sensorOrientation,
                                     this,
                                     handler);
                         }
@@ -440,8 +439,6 @@ public class CameraModel {
             final CaptureRequest.Builder builder,
             CameraCaptureSession session,
             ImageReader imageReader,
-            int deviceRotation,
-            int sensorOrientation,
             final CameraCaptureSession.CaptureCallback callback,
             final Handler handler
     ) {
@@ -455,8 +452,6 @@ public class CameraModel {
             captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
             captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
 
-            // Orientation
-//            captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, getJpegOrientation(deviceRotation, sensorOrientation));
 
             CameraCaptureSession.CaptureCallback CaptureCallback
                     = new CameraCaptureSession.CaptureCallback() {
@@ -500,11 +495,11 @@ public class CameraModel {
         Log.e(getClass().getSimpleName(), msg);
     }
 
-    public Integer getCameraSensorOrientation(CameraDevice camera) throws CameraAccessException {
+    Integer getCameraSensorOrientation(CameraDevice camera) throws CameraAccessException {
         return mManager.getCameraCharacteristics(camera.getId()).get(CameraCharacteristics.SENSOR_ORIENTATION);
     }
 
-    public CameraCharacteristics getCameraCharacteristics(CameraDevice camera) throws CameraAccessException {
+    CameraCharacteristics getCameraCharacteristics(CameraDevice camera) throws CameraAccessException {
         return mManager.getCameraCharacteristics(camera.getId());
     }
 }

@@ -92,7 +92,15 @@ public class CameraView extends TextureView {
         mPresenter.takePic(callback);
     }
 
-    public void resize(int aspectWidth, int aspectHeight) throws IllegalArgumentException {
+    public void enableDynamicProcessing(CameraPresenter.DynamicImageCaptureCallback callback){
+        mPresenter.enableDynamicImageProcessing(callback);
+    }
+
+    public void disableDynamicProcessing() {
+        mPresenter.disableDynamicImageProcessing();
+    }
+
+    void resize(int aspectWidth, int aspectHeight) throws IllegalArgumentException {
         if (aspectWidth <= 0 || aspectHeight <= 0) {
             throw new IllegalArgumentException("Aspect value must be greater than 0!");
         }
@@ -105,7 +113,7 @@ public class CameraView extends TextureView {
         Log.e(getClass().getSimpleName(),msg);
     }
 
-    public void handleError(Exception error) {
+    void handleError(Exception error) {
         showLog(error.getMessage());
     }
 }
