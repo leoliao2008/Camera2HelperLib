@@ -4,7 +4,6 @@ import android.content.Context;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.TextureView;
-import android.view.ViewGroup;
 
 /**
  * Author: leo
@@ -30,7 +29,18 @@ public class CameraView extends TextureView {
         super(context, attrs, defStyleAttr);
         setKeepScreenOn(true);
         mPresenter=new CameraPresenter(this);
-        mPresenter.setSurfaceTextureListener();
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mPresenter.onAttachedToWindow();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        mPresenter.onDetachedFromWindow();
     }
 
     @Override
@@ -40,13 +50,23 @@ public class CameraView extends TextureView {
         if (mTargetAspectWidth > 0 && mTargetAspectHeight > 0) {
             float currentRatio=width*1.f/height;
             float targetRatio= mTargetAspectWidth *1.f/ mTargetAspectHeight;
-            if(currentRatio>targetRatio){
+            if(currentRatio<targetRatio){
                 height= (int) (width* mTargetAspectHeight*1.f / mTargetAspectWidth);
             }else {
                 width= (int) (height* mTargetAspectWidth*1.f / mTargetAspectHeight);
             }
         }
+//        int width = MeasureSpec.getSize(widthMeasureSpec);
+//        int height = MeasureSpec.getSize(heightMeasureSpec);
+//        if(mTargetAspectHeight>0&&mTargetAspectWidth>0){
+//            if (width < height * mTargetAspectWidth / mTargetAspectHeight) {
+//                height=width * mTargetAspectHeight / mTargetAspectWidth;
+//            } else {
+//                width=height*mTargetAspectWidth/mTargetAspectHeight;
+//            }
+//        }
         setMeasuredDimension(width,height);
+
     }
 
 

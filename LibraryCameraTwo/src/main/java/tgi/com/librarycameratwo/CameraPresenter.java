@@ -1,8 +1,8 @@
 package tgi.com.librarycameratwo;
 
 import android.content.Context;
-import android.content.res.Configuration;
 import android.graphics.ImageFormat;
+import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -16,6 +16,7 @@ import android.os.Process;
 import android.support.annotation.NonNull;
 import android.util.Log;
 import android.util.Size;
+import android.view.OrientationEventListener;
 import android.view.Surface;
 import android.view.TextureView;
 
@@ -40,6 +41,9 @@ public class CameraPresenter {
     private CameraCaptureSession mSession;
     private CaptureRequest.Builder mRequestBuilder;
     private ImageReader mImageReader;
+    private OrientationEventListener mOrientationEventListener;
+    private Integer mSensorOrientation;
+    private Size mOptimalSize;
 
 
     public CameraPresenter(CameraView view) {
@@ -51,106 +55,29 @@ public class CameraPresenter {
         mHandler = new Handler(mHandlerThread.getLooper());
     }
 
-    public void setSurfaceTextureListener() {
+
+    public void onAttachedToWindow() {
+        if(!mView.isAvailable()){
+            setSurfaceTextureListener();
+        }else {
+            openCamera(mView.getSurfaceTexture());
+        }
+    }
+
+    public void onDetachedFromWindow(){
+        if(mOrientationEventListener!=null){
+            mOrientationEventListener.disable();
+            mOrientationEventListener=null;
+        }
+        closeCamera();
+    }
+
+
+    private void setSurfaceTextureListener() {
         mView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override
             public void onSurfaceTextureAvailable(final SurfaceTexture surface, int width, final int height) {
-                try {
-                    boolean acquire = mLock.tryAcquire(2500, TimeUnit.MILLISECONDS);
-                    if (!acquire) {
-                        mView.handleError(new Exception("Camera is not available. Operation abort."));
-                        return;
-                    }
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                    mView.handleError(e);
-                }
-                try {
-                    mModel.openCamera(
-                            mModel.getRearCamera(),
-                            new CameraDevice.StateCallback() {
-                                @Override
-                                public void onOpened(@NonNull CameraDevice camera) {
-                                    mLock.release();
-                                    mCamera = camera;
-                                    try {
-//                                        Size optimalSize = mModel.getOptimalSize(
-//                                                mView.getDisplay(),
-//                                                mCamera.getId(),
-//                                                mView.getWidth(),
-//                                                mView.getHeight());
-//                                        int orientation = mView.getResources().getConfiguration().orientation;
-//                                        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-//                                            mView.resize(optimalSize.getWidth(),optimalSize.getHeight() );
-//                                        } else {
-//                                            mView.resize(optimalSize.getHeight(),optimalSize.getWidth() );
-//                                        }
-//
-//                                        mImageReader = ImageReader.newInstance(
-//                                                optimalSize.getWidth(),
-//                                                optimalSize.getHeight(),
-//                                                ImageFormat.JPEG,
-//                                                2
-//                                        );
-                                        mImageReader=ImageReader.newInstance(
-                                                1024,
-                                                726,
-                                                ImageFormat.JPEG,
-                                                1
-                                        );
-                                        surface.setDefaultBufferSize(1024,768 );
-                                        mView.resize(1024,768 );
-
-                                        mModel.startPreview(
-                                                mCamera,
-                                                new Surface(surface),
-                                                Arrays.asList(new Surface(surface), mImageReader.getSurface()),
-                                                new PreviewSessionCallback() {
-                                                    @Override
-                                                    public void onSessionEstablished(CaptureRequest.Builder builder, CameraCaptureSession session) {
-                                                        showLog("onSessionEstablished");
-                                                        mRequestBuilder = builder;
-                                                        mSession = session;
-                                                    }
-
-                                                    @Override
-                                                    public void onFailToEstablishSession() {
-                                                        showLog("onFailToEstablishSession");
-                                                        closeCamera();
-                                                    }
-                                                }, mHandler);
-
-                                    } catch (CameraAccessException e) {
-                                        e.printStackTrace();
-                                        closeCamera();
-                                        mView.handleError(e);
-                                    }
-                                }
-
-                                @Override
-                                public void onDisconnected(@NonNull CameraDevice camera) {
-                                    closeCamera();
-                                }
-
-                                @Override
-                                public void onError(@NonNull CameraDevice camera, int error) {
-                                    closeCamera();
-                                    mView.handleError(new Exception("Critical Error when trying to " +
-                                            "open camera: " + camera.getId() + " error code: " + error));
-                                }
-
-                                @Override
-                                public void onClosed(@NonNull CameraDevice camera) {
-                                    super.onClosed(camera);
-                                    mLock.release();
-                                }
-                            },
-                            mHandler
-                    );
-                } catch (CameraAccessException e) {
-                    e.printStackTrace();
-                    mView.handleError(e);
-                }
+                openCamera(surface);
             }
 
             @Override
@@ -171,7 +98,118 @@ public class CameraPresenter {
         });
     }
 
-    public void closeCamera() {
+    private void openCamera(final SurfaceTexture surface) {
+        try {
+            boolean acquire = mLock.tryAcquire(2500, TimeUnit.MILLISECONDS);
+            if (!acquire) {
+                mView.handleError(new Exception("Camera is not available. Operation abort."));
+                return;
+            }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+            mView.handleError(e);
+        }
+        try {
+            mModel.openCamera(
+                    mModel.getRearCamera(),
+                    new CameraDevice.StateCallback() {
+                        @Override
+                        public void onOpened(@NonNull CameraDevice camera) {
+                            try {
+                                mLock.release();
+                                mCamera = camera;
+                                mSensorOrientation=mModel.getCameraSensorOrientation(camera);
+                                showLog("sensor orientation is: "+mSensorOrientation);
+
+                                mOptimalSize = mModel.chooseOptimalSize(
+                                        mModel.getCameraCharacteristics(mCamera),
+                                        CameraViewConstant.DESIRED_PREVIEW_SIZE.getWidth(),
+                                        CameraViewConstant.DESIRED_PREVIEW_SIZE.getHeight());
+
+                                // We fit the aspect ratio of TextureView to the size of preview we picked.
+                                int rotation = mView.getDisplay().getRotation();
+                                final Matrix matrix = mModel.getTransformMatrix(
+                                        rotation,
+                                        mView.getWidth(),
+                                        mView.getHeight(),
+                                        mOptimalSize
+                                );
+                                mView.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        mView.setTransform(matrix);
+                                    }
+                                });
+
+                                if (rotation == Surface.ROTATION_90||rotation==Surface.ROTATION_270) {
+                                    mView.resize(mOptimalSize.getWidth(), mOptimalSize.getHeight());
+                                } else {
+                                    mView.resize(mOptimalSize.getHeight(), mOptimalSize.getWidth());
+                                }
+                                surface.setDefaultBufferSize(mOptimalSize.getWidth(), mOptimalSize.getHeight() );
+
+                                mImageReader=ImageReader.newInstance(
+                                        mOptimalSize.getWidth(),
+                                        mOptimalSize.getHeight(),
+                                        ImageFormat.JPEG,
+                                        2
+                                );
+
+                                mModel.startPreview(
+                                        mCamera,
+                                        new Surface(surface),
+                                        Arrays.asList(new Surface(surface), mImageReader.getSurface()),
+                                        new PreviewSessionCallback() {
+                                            @Override
+                                            public void onSessionEstablished(CaptureRequest.Builder builder, CameraCaptureSession session) {
+                                                showLog("onSessionEstablished");
+                                                mRequestBuilder = builder;
+                                                mSession = session;
+                                            }
+
+                                            @Override
+                                            public void onFailToEstablishSession() {
+                                                showLog("onFailToEstablishSession");
+                                                closeCamera();
+                                            }
+                                        }, mHandler);
+
+                            } catch (CameraAccessException e) {
+                                e.printStackTrace();
+                                closeCamera();
+                                mView.handleError(e);
+                            }
+                        }
+
+                        @Override
+                        public void onDisconnected(@NonNull CameraDevice camera) {
+                            closeCamera();
+                        }
+
+                        @Override
+                        public void onError(@NonNull CameraDevice camera, int error) {
+                            closeCamera();
+                            mView.handleError(new Exception("Critical Error when trying to " +
+                                    "open camera: " + camera.getId() + " error code: " + error));
+                        }
+
+                        @Override
+                        public void onClosed(@NonNull CameraDevice camera) {
+                            super.onClosed(camera);
+                            mLock.release();
+                        }
+                    },
+                    mHandler
+            );
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+            mView.handleError(e);
+        }
+    }
+
+
+
+    private void closeCamera() {
         showLog("closeCamera");
         try {
             boolean acquire = mLock.tryAcquire(2500, TimeUnit.MILLISECONDS);
@@ -202,15 +240,19 @@ public class CameraPresenter {
         if (mRequestBuilder == null || mSession == null) {
             return;
         }
-        try {
-            mModel.takePic(mRequestBuilder, mSession, mImageReader, callback, mHandler);
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
-            mView.handleError(e);
-        }
+        mModel.takePic(
+                mRequestBuilder,
+                mSession,
+                mImageReader,
+                mView.getDisplay().getRotation(),
+                mSensorOrientation,
+                callback,
+                mHandler);
     }
 
     private void showLog(String msg) {
         Log.e(getClass().getSimpleName(), msg);
     }
+
+
 }

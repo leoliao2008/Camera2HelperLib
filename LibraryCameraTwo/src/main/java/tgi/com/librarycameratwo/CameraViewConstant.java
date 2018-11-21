@@ -1,5 +1,7 @@
 package tgi.com.librarycameratwo;
 
+import android.util.Size;
+
 /**
  * Author: leo
  * Data: On 16/11/2018
@@ -25,4 +27,7 @@ public interface CameraViewConstant {
     String STAGE_LOCKING_FOCUS="STAGE_LOCKING_FOCUS";
     String STAGE_PRECAPTURING_HAS_BEEN_STARTED = "STAGE_PRECAPTURING_HAS_BEEN_STARTED";
     String STAGE_WAITING_FOR_NON_PRECAPTURE_STATE = "STAGE_WAITING_FOR_NON_PRECAPTURE_STATE";
+    int MINIMUM_PREVIEW_SIZE = 320;
+    Size DESIRED_PREVIEW_SIZE = new Size(640, 480);
+
 }
