@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
  * Project: AndroidCameraDemo
  * Description:
  */
-class CameraPresenter {
+public class CameraPresenter {
     private CameraView mView;
     private CameraModel mModel;
     private CameraManager mCameraManager;
@@ -272,7 +272,7 @@ class CameraPresenter {
                 mHandler);
     }
 
-    void enableDynamicImageProcessing(final DynamicImageCaptureCallback callback){
+    void enableDynamicImageProcessing(final CameraView.DynamicImageCaptureCallback callback){
         if(mDynamicPictureReader!=null){
             mDynamicPictureReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
                 @Override
@@ -294,10 +294,7 @@ class CameraPresenter {
         Log.e(getClass().getSimpleName(), msg);
     }
 
-    public interface DynamicImageCaptureCallback{
-        void onGetDynamicImage(Bitmap image);
 
-    }
 
 
 }

@@ -8,6 +8,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
 
+import tgi.com.librarycameratwo.CameraPresenter;
 import tgi.com.librarycameratwo.CameraView;
 import tgi.com.librarycameratwo.TakePicCallback;
 

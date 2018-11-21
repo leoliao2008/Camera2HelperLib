@@ -1,6 +1,7 @@
 package tgi.com.librarycameratwo;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.TextureView;
@@ -92,7 +93,7 @@ public class CameraView extends TextureView {
         mPresenter.takePic(callback);
     }
 
-    public void enableDynamicProcessing(CameraPresenter.DynamicImageCaptureCallback callback){
+    public void enableDynamicProcessing(DynamicImageCaptureCallback callback){
         mPresenter.enableDynamicImageProcessing(callback);
     }
 
@@ -115,5 +116,9 @@ public class CameraView extends TextureView {
 
     void handleError(Exception error) {
         showLog(error.getMessage());
+    }
+
+    public interface DynamicImageCaptureCallback{
+        void onGetDynamicImage(Bitmap image);
     }
 }
