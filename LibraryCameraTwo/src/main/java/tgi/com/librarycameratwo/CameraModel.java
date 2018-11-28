@@ -3,6 +3,7 @@ package tgi.com.librarycameratwo;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.graphics.Bitmap;
+import android.graphics.Bitmap.Config;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -43,6 +44,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static android.hardware.camera2.CameraMetadata.CONTROL_AE_STATE_PRECAPTURE;
+import static tgi.com.librarycameratwo.CameraViewConstant.INPUT_SIZE;
 import static tgi.com.librarycameratwo.CameraViewConstant.MAX_PREVIEW_HEIGHT;
 import static tgi.com.librarycameratwo.CameraViewConstant.MAX_PREVIEW_WIDTH;
 import static tgi.com.librarycameratwo.CameraViewConstant.STAGE_IMAGE_HAS_BEEN_TAKEN;
@@ -62,7 +64,6 @@ import static tgi.com.librarycameratwo.CameraViewConstant.STAGE_YOU_SHOULD_START
  */
 public class CameraModel {
     private CameraManager mManager;
-    //    private String mCurrentStage = CameraViewConstant.STAGE_PREVIEWING;
     private SparseIntArray mOrientationMapping;
     /**
      * Camera state: Showing camera preview.
@@ -89,6 +90,12 @@ public class CameraModel {
      */
     private static final int STATE_PICTURE_TAKEN = 4;
     private int mState;
+    private int[] mRgbBytes;
+    private Bitmap mRgbFrameBitmap;
+    private Bitmap mCroppedBitmap;
+    private Matrix mFrameToCropTransform;
+    private Matrix mCropToFrameTransform;
+    private byte[][] mYuvBytes;
 
 
     CameraModel(CameraManager cameraManager) {
@@ -100,7 +107,7 @@ public class CameraModel {
         mOrientationMapping.append(Surface.ROTATION_270, 180);
     }
 
-    public String getFrontCamera() throws CameraAccessException {
+    String getFrontCamera() throws CameraAccessException {
         String[] cameraIdList = mManager.getCameraIdList();
         for (String id : cameraIdList) {
             CameraCharacteristics chars = mManager.getCameraCharacteristics(id);
@@ -185,23 +192,25 @@ public class CameraModel {
             int textureViewFormerWidth,
             int textureViewFormerHeight,
             Size targetSize) {
-        final Matrix matrix = new Matrix();
-        final RectF viewRect = new RectF(0, 0, textureViewFormerWidth, textureViewFormerHeight);
-        final RectF bufferRect = new RectF(0, 0, targetSize.getHeight(), targetSize.getWidth());
-        final float centerX = viewRect.centerX();
-        final float centerY = viewRect.centerY();
+        Matrix matrix = new Matrix();
+        RectF formerFrame = new RectF(0, 0, textureViewFormerWidth, textureViewFormerHeight);
+        RectF targetFrame = new RectF(0, 0, targetSize.getHeight(), targetSize.getWidth());
+        float centerX = formerFrame.centerX();
+        float centerY = formerFrame.centerY();
+
+        targetFrame.offset(centerX - targetFrame.centerX(), centerY - targetFrame.centerY());
+        matrix.setRectToRect(formerFrame, targetFrame, Matrix.ScaleToFit.FILL);
+        float scale = Math.max(
+                (float) textureViewFormerHeight / targetSize.getHeight(),
+                (float) textureViewFormerWidth / targetSize.getWidth());
+        matrix.postScale(scale, scale, centerX, centerY);
+
         if (Surface.ROTATION_90 == deviceRotation || Surface.ROTATION_270 == deviceRotation) {
-            bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
-            matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
-            final float scale =
-                    Math.max(
-                            (float) textureViewFormerHeight / targetSize.getHeight(),
-                            (float) textureViewFormerWidth / targetSize.getWidth());
-            matrix.postScale(scale, scale, centerX, centerY);
             matrix.postRotate(90 * (deviceRotation - 2), centerX, centerY);
         } else if (Surface.ROTATION_180 == deviceRotation) {
             matrix.postRotate(180, centerX, centerY);
         }
+
         return matrix;
     }
 
@@ -219,7 +228,7 @@ public class CameraModel {
                       final Surface dynamicImageCaptureSurface,
                       final PreviewSessionCallback callback, final Handler handler) throws CameraAccessException {
         camera.createCaptureSession(
-                Arrays.asList(previewSurface,stillPicCaptureSurface,dynamicImageCaptureSurface),
+                Arrays.asList(previewSurface, stillPicCaptureSurface, dynamicImageCaptureSurface),
                 new CameraCaptureSession.StateCallback() {
                     @Override
                     public void onConfigured(@NonNull CameraCaptureSession session) {
@@ -282,15 +291,15 @@ public class CameraModel {
                     int w1 = image.getWidth();
                     int h1 = image.getHeight();
                     int orientation = getJpegOrientation(deviceRotation, sensorOrientation);
-                    Matrix matrix=new Matrix();
-                    matrix.postRotate(orientation , w1 /2, h1 /2);
+                    Matrix matrix = new Matrix();
+                    matrix.postRotate(orientation, w1 / 2, h1 / 2);
                     //todo 先假设orientation都是90度
-                    Bitmap bitmap = Bitmap.createBitmap(h1, w1,image.getConfig());
+                    Bitmap bitmap = Bitmap.createBitmap(h1, w1, image.getConfig());
                     int w2 = bitmap.getWidth();
                     int h2 = bitmap.getHeight();
-                    matrix.postTranslate((w2-w1)/2,(h2-h1)/2);
-                    Canvas canvas=new Canvas(bitmap);
-                    canvas.drawBitmap(image,matrix,new Paint());
+                    matrix.postTranslate((w2 - w1) / 2, (h2 - h1) / 2);
+                    Canvas canvas = new Canvas(bitmap);
+                    canvas.drawBitmap(image, matrix, new Paint());
                     callback.onImageTaken(bitmap);
                 } else {
                     callback.onError(new Exception("Image is taken but empty."));
@@ -472,7 +481,6 @@ public class CameraModel {
     }
 
 
-
     /**
      * https://stackoverflow.com/questions/48406497/camera2-understanding-the-sensor-and-device-orientations
      *
@@ -485,10 +493,21 @@ public class CameraModel {
         // For devices with orientation of 90, we simply return our mapping from mOrientationMapping.
         // For devices with orientation of 270, we need to rotate the JPEG 180 degrees.
         int orientation = (mOrientationMapping.get(deviceRotation) + cameraSensorOrientation + 270) % 360;
-        showLog("getJpegOrientation: "+orientation);
+        showLog("getJpegOrientation: " + orientation);
         return orientation;
     }
 
+    void fillBytes(final Image.Plane[] planes, final byte[][] yuvBytes) {
+        // Because of the variable row stride it's not possible to know in
+        // advance the actual necessary dimensions of the yuv planes.
+        for (int i = 0; i < planes.length; ++i) {
+            final ByteBuffer buffer = planes[i].getBuffer();
+            if (yuvBytes[i] == null) {
+                yuvBytes[i] = new byte[buffer.capacity()];
+            }
+            buffer.get(yuvBytes[i]);
+        }
+    }
 
 
     private void showLog(String msg) {
@@ -501,5 +520,58 @@ public class CameraModel {
 
     CameraCharacteristics getCameraCharacteristics(CameraDevice camera) throws CameraAccessException {
         return mManager.getCameraCharacteristics(camera.getId());
+    }
+
+    void initTensorFlowInput(Size optimalSize) {
+        int width = optimalSize.getWidth();
+        int height = optimalSize.getHeight();
+
+        mRgbBytes = new int[width * height];
+        mRgbFrameBitmap = Bitmap.createBitmap(width, height, Config.ARGB_8888);
+        mCroppedBitmap = Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Config.ARGB_8888);
+
+        //先假设都是90度sensor orientation
+        mFrameToCropTransform = ImageUtils.getTransformationMatrix(
+                width, height,
+                INPUT_SIZE, INPUT_SIZE,
+                90, true);
+
+        mCropToFrameTransform = new Matrix();
+        mFrameToCropTransform.invert(mCropToFrameTransform);
+        mYuvBytes = new byte[3][];
+    }
+
+
+    Bitmap getImageFromYUV_420_888Format(Image image, Size optimalSize) {
+        int width = optimalSize.getWidth();
+        int height = optimalSize.getHeight();
+        if (image == null) {
+            return null;
+        }
+        Image.Plane[] planes = image.getPlanes();
+        if (planes == null) {
+            return null;
+        }
+        fillBytes(planes, mYuvBytes);
+
+        int yRowStride = planes[0].getRowStride();
+        int uvRowStride = planes[1].getRowStride();
+        int uvPixelStride = planes[1].getPixelStride();
+        ImageUtils.convertYUV420ToARGB8888(
+                mYuvBytes[0],
+                mYuvBytes[1],
+                mYuvBytes[2],
+                width,
+                height,
+                yRowStride,
+                uvRowStride,
+                uvPixelStride,
+                mRgbBytes);
+
+        mRgbFrameBitmap.setPixels(mRgbBytes, 0, width, 0, 0, width, height);
+        final Canvas canvas = new Canvas(mCroppedBitmap);
+        canvas.drawBitmap(mRgbFrameBitmap, mFrameToCropTransform, null);
+        image.close();
+        return mCroppedBitmap;
     }
 }

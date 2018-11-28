@@ -17,6 +17,7 @@ public class CameraView extends TextureView {
     private int mTargetAspectWidth = -1;
     private int mTargetAspectHeight = -1;
     private CameraPresenter mPresenter;
+    private DynamicImageCaptureCallback mDynamicImageCaptureCallback;
 
     public CameraView(Context context) {
         this(context,null);
@@ -42,32 +43,33 @@ public class CameraView extends TextureView {
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         mPresenter.onDetachedFromWindow();
+        mDynamicImageCaptureCallback=null;
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        int width = calculateDimension(widthMeasureSpec,CameraViewConstant.DEFAULT_VIEW_WIDTH);
-        int height= calculateDimension(heightMeasureSpec,CameraViewConstant.DEFAULT_VIEW_HEIGHT);
-        if (mTargetAspectWidth > 0 && mTargetAspectHeight > 0) {
-            float currentRatio=width*1.f/height;
-            float targetRatio= mTargetAspectWidth *1.f/ mTargetAspectHeight;
-            if(currentRatio<targetRatio){
-                height= (int) (width* mTargetAspectHeight*1.f / mTargetAspectWidth);
-            }else {
-                width= (int) (height* mTargetAspectWidth*1.f / mTargetAspectHeight);
-            }
-        }
-//        int width = MeasureSpec.getSize(widthMeasureSpec);
-//        int height = MeasureSpec.getSize(heightMeasureSpec);
-//        if(mTargetAspectHeight>0&&mTargetAspectWidth>0){
-//            if (width < height * mTargetAspectWidth / mTargetAspectHeight) {
-//                height=width * mTargetAspectHeight / mTargetAspectWidth;
-//            } else {
-//                width=height*mTargetAspectWidth/mTargetAspectHeight;
+//        int width = calculateDimension(widthMeasureSpec,CameraViewConstant.DEFAULT_VIEW_WIDTH);
+//        int height= calculateDimension(heightMeasureSpec,CameraViewConstant.DEFAULT_VIEW_HEIGHT);
+//        if (mTargetAspectWidth > 0 && mTargetAspectHeight > 0) {
+//            float currentRatio=width*1.f/height;
+//            float targetRatio= mTargetAspectWidth *1.f/ mTargetAspectHeight;
+//            if(currentRatio<targetRatio){
+//                height= (int) (width* mTargetAspectHeight*1.f / mTargetAspectWidth);
+//            }else {
+//                width= (int) (height* mTargetAspectWidth*1.f / mTargetAspectHeight);
 //            }
 //        }
-        setMeasuredDimension(width,height);
 
+        int width = MeasureSpec.getSize(widthMeasureSpec);
+        int height = MeasureSpec.getSize(heightMeasureSpec);
+        if(mTargetAspectHeight>0&&mTargetAspectWidth>0){
+            if (width > height * mTargetAspectWidth / mTargetAspectHeight) {
+                height=width * mTargetAspectHeight / mTargetAspectWidth;
+            } else {
+                width=height*mTargetAspectWidth/mTargetAspectHeight;
+            }
+        }
+        setMeasuredDimension(width,height);
     }
 
 
@@ -89,11 +91,29 @@ public class CameraView extends TextureView {
         return dimen;
     }
 
-    public void takePicture(TakePicCallback callback){
-        mPresenter.takePic(callback);
+    public void takePicture(final TakePicCallback callback){
+        disableDynamicProcessing();
+        mPresenter.takePic(new TakePicCallback() {
+            @Override
+            public void onError(Exception e) {
+                callback.onError(e);
+            }
+
+            @Override
+            public void onImageTaken(Bitmap image) {
+                callback.onImageTaken(image);
+                if(mDynamicImageCaptureCallback!=null){
+                    enableDynamicProcessing(mDynamicImageCaptureCallback);
+                }
+
+            }
+        });
     }
 
+
+
     public void enableDynamicProcessing(DynamicImageCaptureCallback callback){
+        mDynamicImageCaptureCallback=callback;
         mPresenter.enableDynamicImageProcessing(callback);
     }
 

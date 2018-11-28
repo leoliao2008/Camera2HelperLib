@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package tgi.com.androidcameramodule.utils;
+package tgi.com.librarycameratwo;
 
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -21,7 +21,6 @@ import android.graphics.Matrix;
 import android.media.Image;
 import android.os.Environment;
 
-import junit.framework.Assert;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -32,6 +31,7 @@ import java.util.logging.Logger;
  * Utility class for manipulating images.
  **/
 public class ImageUtils {
+    @SuppressWarnings("unused")
 
     // This value is 2 ^ 18 - 1, and is used to clamp the RGB values before their ranges
     // are normalized to eight bits.
@@ -42,7 +42,7 @@ public class ImageUtils {
      * Utility method to compute the allocated size in bytes of a YUV420SP image
      * of the given dimensions.
      */
-    public static int getYUVByteSize(final int width, final int height) {
+     static int getYUVByteSize(final int width, final int height) {
         // The luminance plane requires 1 byte per pixel.
         final int ySize = width * height;
 
@@ -53,33 +53,9 @@ public class ImageUtils {
         return ySize + uvSize;
     }
 
-    /**
-     * Saves a Bitmap object to disk for analysis.
-     *
-     * @param bitmap The bitmap to save.
-     */
-    public static void saveBitmap(final Bitmap bitmap) {
-        final String root =
-                Environment.getExternalStorageDirectory().getAbsolutePath() + File.separator + "tensorflow";
-        final File myDir = new File(root);
-
-        final String fname = "preview.png";
-        final File file = new File(myDir, fname);
-        if (file.exists()) {
-            file.delete();
-        }
-        try {
-            final FileOutputStream out = new FileOutputStream(file);
-            bitmap.compress(Bitmap.CompressFormat.PNG, 99, out);
-            out.flush();
-            out.close();
-        } catch (final Exception e) {
-            e.printStackTrace();
-        }
-    }
 
 
-    public static int[] convertImageToBitmap(Image image, int[] output, byte[][] cachedYuvBytes) {
+     static int[] convertImageToBitmap(Image image, int[] output, byte[][] cachedYuvBytes) {
         if (cachedYuvBytes == null || cachedYuvBytes.length != 3) {
             cachedYuvBytes = new byte[3][];
         }
@@ -95,7 +71,7 @@ public class ImageUtils {
         return output;
     }
 
-    public static void convertYUV420ToARGB8888(byte[] yData, byte[] uData, byte[] vData, int width, int height,
+     static void convertYUV420ToARGB8888(byte[] yData, byte[] uData, byte[] vData, int width, int height,
                                                int yRowStride, int uvRowStride, int uvPixelStride, int[] out) {
         int i = 0;
         for (int y = 0; y < height; y++) {
@@ -158,8 +134,7 @@ public class ImageUtils {
     }
 
 
-    public static void cropAndRescaleBitmap(final Bitmap src, final Bitmap dst, int sensorOrientation) {
-        Assert.assertEquals(dst.getWidth(), dst.getHeight());
+     static void cropAndRescaleBitmap(final Bitmap src, final Bitmap dst, int sensorOrientation) {
         final float minDim = Math.min(src.getWidth(), src.getHeight());
 
         final Matrix matrix = new Matrix();
@@ -183,7 +158,7 @@ public class ImageUtils {
         canvas.drawBitmap(src, matrix, null);
     }
 
-    public static Matrix getTransformationMatrix(
+     static Matrix getTransformationMatrix(
             final int srcWidth,
             final int srcHeight,
             final int dstWidth,

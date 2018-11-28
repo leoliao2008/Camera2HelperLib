@@ -1,14 +1,12 @@
 package tgi.com.androidcamerademo;
 
 import android.graphics.Bitmap;
-import android.media.ImageReader;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
 
-import tgi.com.librarycameratwo.CameraPresenter;
 import tgi.com.librarycameratwo.CameraView;
 import tgi.com.librarycameratwo.TakePicCallback;
 
