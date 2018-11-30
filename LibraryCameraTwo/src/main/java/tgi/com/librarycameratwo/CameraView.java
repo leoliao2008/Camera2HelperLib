@@ -111,7 +111,6 @@ public class CameraView extends TextureView {
     }
 
 
-
     public void enableDynamicProcessing(DynamicImageCaptureCallback callback){
         mDynamicImageCaptureCallback=callback;
         mPresenter.enableDynamicImageProcessing(callback);
@@ -131,7 +130,9 @@ public class CameraView extends TextureView {
     }
 
     private void showLog(String msg){
-        Log.e(getClass().getSimpleName(),msg);
+        if(CameraViewConstant.IS_DEBUG_MODE){
+            Log.e(getClass().getSimpleName(),msg);
+        }
     }
 
     void handleError(Exception error) {

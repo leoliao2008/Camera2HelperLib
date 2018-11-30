@@ -74,26 +74,22 @@ public class CameraPresenter {
         mView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override
             public void onSurfaceTextureAvailable(final SurfaceTexture surface, int width, final int height) {
-                showLog("onSurfaceTextureAvailable");
                 openCamera(mView.getSurfaceTexture());
             }
 
             @Override
             public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
-                showLog("onSurfaceTextureAvailable");
 
             }
 
             @Override
             public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
-                showLog("onSurfaceTextureDestroyed");
                 closeCamera();
                 return true;
             }
 
             @Override
             public void onSurfaceTextureUpdated(SurfaceTexture surface) {
-                showLog("onSurfaceTextureUpdated");
 
             }
         });
@@ -157,7 +153,7 @@ public class CameraPresenter {
                                 });
 
 
-                                surface.setDefaultBufferSize(mOptimalSize.getWidth(), mOptimalSize.getHeight());
+//                                surface.setDefaultBufferSize(mOptimalSize.getWidth(), mOptimalSize.getHeight());
 
                                 mStillPictureReader = ImageReader.newInstance(
                                         mOptimalSize.getWidth(),

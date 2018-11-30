@@ -30,5 +30,5 @@ public interface CameraViewConstant {
     int MINIMUM_PREVIEW_SIZE = 320;
     Size DESIRED_PREVIEW_SIZE = new Size(640, 480);
     int INPUT_SIZE = 244;
-    boolean IS_DEBUG_MODE=true;
+    boolean IS_DEBUG_MODE=false;
 }

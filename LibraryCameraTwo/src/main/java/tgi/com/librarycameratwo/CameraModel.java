@@ -117,7 +117,6 @@ public class CameraModel {
             }
         }
         return null;
-
     }
 
     String getRearCamera() throws CameraAccessException {
@@ -511,7 +510,9 @@ public class CameraModel {
 
 
     private void showLog(String msg) {
-        Log.e(getClass().getSimpleName(), msg);
+        if (CameraViewConstant.IS_DEBUG_MODE) {
+            Log.e(getClass().getSimpleName(), msg);
+        }
     }
 
     Integer getCameraSensorOrientation(CameraDevice camera) throws CameraAccessException {
