@@ -86,6 +86,16 @@ public class CameraModel {
     private static final int STATE_WAITING_NON_PRECAPTURE = 3;
 
     /**
+     * Max preview width that is guaranteed by Camera2 API
+     */
+    private static final int MAX_PREVIEW_WIDTH = 1920;
+
+    /**
+     * Max preview height that is guaranteed by Camera2 API
+     */
+    private static final int MAX_PREVIEW_HEIGHT = 1080;
+
+    /**
      * Camera state: Picture was taken.
      */
     private static final int STATE_PICTURE_TAKEN = 4;
@@ -94,7 +104,6 @@ public class CameraModel {
     private Bitmap mRgbFrameBitmap;
     private Bitmap mCroppedBitmap;
     private Matrix mFrameToCropTransform;
-    private Matrix mCropToFrameTransform;
     private byte[][] mYuvBytes;
 
 
@@ -144,7 +153,7 @@ public class CameraModel {
      * @param minHeight The minimum desired minHeight
      * @return The optimal {@code Size}, or an arbitrary one if none were big enough
      */
-    Size chooseOptimalSize(CameraCharacteristics chars, int minWidth, int minHeight) {
+    Size chooseTensorFlowOptimalSize(CameraCharacteristics chars, int minWidth, int minHeight) {
         StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
         Size[] choices = map.getOutputSizes(SurfaceTexture.class);
         int minSize = Math.max(Math.min(minWidth, minHeight), CameraViewConstant.MINIMUM_PREVIEW_SIZE);
@@ -178,19 +187,52 @@ public class CameraModel {
         }
     }
 
+    Size choosePreviewOptimalSize(Size[] choices, int textureViewWidth,
+                                  int textureViewHeight, int maxWidth, int maxHeight, Size aspectRatio) {
+
+        // Collect the supported resolutions that are at least as big as the preview Surface
+        List<Size> bigEnough = new ArrayList<>();
+        // Collect the supported resolutions that are smaller than the preview Surface
+        List<Size> notBigEnough = new ArrayList<>();
+        int w = aspectRatio.getWidth();
+        int h = aspectRatio.getHeight();
+        for (Size option : choices) {
+            if (option.getWidth() <= maxWidth && option.getHeight() <= maxHeight &&
+                    option.getHeight() == option.getWidth() * h / w) {
+                if (option.getWidth() >= textureViewWidth &&
+                        option.getHeight() >= textureViewHeight) {
+                    bigEnough.add(option);
+                } else {
+                    notBigEnough.add(option);
+                }
+            }
+        }
+
+        // Pick the smallest of those big enough. If there is no one big enough, pick the
+        // largest of those not big enough.
+        if (bigEnough.size() > 0) {
+            return Collections.min(bigEnough, new CompareSizesByArea());
+        } else if (notBigEnough.size() > 0) {
+            return Collections.max(notBigEnough, new CompareSizesByArea());
+        } else {
+            return choices[0];
+        }
+    }
+
     /**
-     * Configures the necessary {@link android.graphics.Matrix} transformation to `mTextureView`.
-     * This method should be called after the camera preview size is determined in
-     * setUpCameraOutputs and also the size of `mTextureView` is fixed.
+     * 这个函数保证摄像头传过来的图像在preview中得到适当的拉伸，保持显示比例的正常。
      *
-     * @param textureViewFormerWidth  The width of `mTextureView`
-     * @param textureViewFormerHeight The height of `mTextureView`
+     * @param deviceRotation
+     * @param formerSize
+     * @param targetSize
+     * @return
      */
-    Matrix getTransformMatrix(
+    Matrix getPreviewTransformMatrix(
             int deviceRotation,
-            int textureViewFormerWidth,
-            int textureViewFormerHeight,
+            Size formerSize,
             Size targetSize) {
+        int textureViewFormerWidth = formerSize.getWidth();
+        int textureViewFormerHeight = formerSize.getHeight();
         Matrix matrix = new Matrix();
         RectF formerFrame = new RectF(0, 0, textureViewFormerWidth, textureViewFormerHeight);
         RectF targetFrame = new RectF(0, 0, targetSize.getHeight(), targetSize.getWidth());
@@ -203,7 +245,6 @@ public class CameraModel {
                 (float) textureViewFormerHeight / targetSize.getHeight(),
                 (float) textureViewFormerWidth / targetSize.getWidth());
         matrix.postScale(scale, scale, centerX, centerY);
-
         if (Surface.ROTATION_90 == deviceRotation || Surface.ROTATION_270 == deviceRotation) {
             matrix.postRotate(90 * (deviceRotation - 2), centerX, centerY);
         } else if (Surface.ROTATION_180 == deviceRotation) {
@@ -282,21 +323,22 @@ public class CameraModel {
         imageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
             @Override
             public void onImageAvailable(ImageReader reader) {
-                showLog("onImageAvailable");
                 Bitmap image = getImageFromImageReader(reader);
                 if (image != null) {
                     imageReader.setOnImageAvailableListener(null, null);
                     //在这里处理照片方向和预览时方向不一致的问题。
                     int w1 = image.getWidth();
                     int h1 = image.getHeight();
-                    int orientation = getJpegOrientation(deviceRotation, sensorOrientation);
                     Matrix matrix = new Matrix();
+                    int orientation = getJpegOrientation(deviceRotation, sensorOrientation);
                     matrix.postRotate(orientation, w1 / 2, h1 / 2);
                     //todo 先假设orientation都是90度
                     Bitmap bitmap = Bitmap.createBitmap(h1, w1, image.getConfig());
                     int w2 = bitmap.getWidth();
                     int h2 = bitmap.getHeight();
                     matrix.postTranslate((w2 - w1) / 2, (h2 - h1) / 2);
+
+
                     Canvas canvas = new Canvas(bitmap);
                     canvas.drawBitmap(image, matrix, new Paint());
                     callback.onImageTaken(bitmap);
@@ -384,6 +426,14 @@ public class CameraModel {
                 process(result);
             }
         }, handler);
+    }
+
+    private String getFloatValues(float[] temp) {
+        StringBuilder sb = new StringBuilder();
+        for (float f : temp) {
+            sb.append(f).append(" ");
+        }
+        return sb.toString();
     }
 
     /**
@@ -492,7 +542,6 @@ public class CameraModel {
         // For devices with orientation of 90, we simply return our mapping from mOrientationMapping.
         // For devices with orientation of 270, we need to rotate the JPEG 180 degrees.
         int orientation = (mOrientationMapping.get(deviceRotation) + cameraSensorOrientation + 270) % 360;
-        showLog("getJpegOrientation: " + orientation);
         return orientation;
     }
 
@@ -537,8 +586,8 @@ public class CameraModel {
                 INPUT_SIZE, INPUT_SIZE,
                 90, true);
 
-        mCropToFrameTransform = new Matrix();
-        mFrameToCropTransform.invert(mCropToFrameTransform);
+        Matrix cropToFrameTransform = new Matrix();
+        mFrameToCropTransform.invert(cropToFrameTransform);
         mYuvBytes = new byte[3][];
     }
 

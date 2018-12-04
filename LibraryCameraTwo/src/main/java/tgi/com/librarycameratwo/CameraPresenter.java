@@ -4,12 +4,16 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
+import android.graphics.Point;
+import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
 import android.os.Handler;
@@ -18,12 +22,17 @@ import android.os.Process;
 import android.support.annotation.NonNull;
 import android.util.Log;
 import android.util.Size;
-import android.view.OrientationEventListener;
 import android.view.Surface;
 import android.view.TextureView;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+
+import static tgi.com.librarycameratwo.CameraViewConstant.MAX_PREVIEW_HEIGHT;
+import static tgi.com.librarycameratwo.CameraViewConstant.MAX_PREVIEW_WIDTH;
 
 /**
  * Author: leo
@@ -34,7 +43,6 @@ import java.util.concurrent.TimeUnit;
 public class CameraPresenter {
     private CameraView mView;
     private CameraModel mModel;
-    private CameraManager mCameraManager;
     private HandlerThread mHandlerThread;
     private Handler mHandler;
     private Semaphore mCameraSwitchLock = new Semaphore(1);//this is a thread safe lock to guarantee open camera/close camera are not executed simultaneously
@@ -43,16 +51,17 @@ public class CameraPresenter {
     private CaptureRequest.Builder mRequestBuilder;
     private ImageReader mStillPictureReader;
     private Integer mSensorOrientation;
-    private Size mOptimalSize;
+    //    private Size mTensorFlowOptimalSize;
     private ImageReader mDynamicPictureReader;
     private volatile Semaphore mDynamicImageReaderLock = new Semaphore(1);
     private CameraView.DynamicImageCaptureCallback mDynamicImageCaptureCallback;
+    private Size mOptimalPreviewSize;
 
 
     CameraPresenter(CameraView view) {
         mView = view;
-        mCameraManager = (CameraManager) view.getContext().getApplicationContext().getSystemService(Context.CAMERA_SERVICE);
-        mModel = new CameraModel(mCameraManager);
+        CameraManager cameraManager = (CameraManager) view.getContext().getApplicationContext().getSystemService(Context.CAMERA_SERVICE);
+        mModel = new CameraModel(cameraManager);
 
     }
 
@@ -79,6 +88,7 @@ public class CameraPresenter {
 
             @Override
             public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+                configurePreviewTransformation(new Size(width, height), mOptimalPreviewSize);
 
             }
 
@@ -91,6 +101,27 @@ public class CameraPresenter {
             @Override
             public void onSurfaceTextureUpdated(SurfaceTexture surface) {
 
+            }
+        });
+    }
+
+    private void configurePreviewTransformation(Size formerSize, Size targetSize) {
+        int rotation = mView.getDisplay().getRotation();
+        if (rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270) {
+            mView.resize(targetSize.getWidth(), targetSize.getHeight());
+        } else {
+            mView.resize(targetSize.getHeight(), targetSize.getWidth());
+        }
+
+        final Matrix matrix = mModel.getPreviewTransformMatrix(
+                rotation,
+                formerSize,
+                targetSize
+        );
+        mView.post(new Runnable() {
+            @Override
+            public void run() {
+                mView.setTransform(matrix);
             }
         });
     }
@@ -122,50 +153,61 @@ public class CameraPresenter {
                                 mCamera = camera;
                                 mSensorOrientation = mModel.getCameraSensorOrientation(camera);
 
-                                mOptimalSize = mModel.chooseOptimalSize(
+                                final Size tensorFlowOptimalSize = mModel.chooseTensorFlowOptimalSize(
                                         mModel.getCameraCharacteristics(mCamera),
-                                        CameraViewConstant.DESIRED_PREVIEW_SIZE.getWidth(),
-                                        CameraViewConstant.DESIRED_PREVIEW_SIZE.getHeight());
+                                        CameraViewConstant.DESIRED_TENSOR_FLOW_PREVIEW_SIZE.getWidth(),
+                                        CameraViewConstant.DESIRED_TENSOR_FLOW_PREVIEW_SIZE.getHeight());
 
-                                mModel.initTensorFlowInput(mOptimalSize);
+                                mModel.initTensorFlowInput(tensorFlowOptimalSize);
 
                                 // We fit the aspect ratio of TextureView to the size of preview we picked.
                                 int formerWidth = mView.getWidth();
                                 int formerHeight = mView.getHeight();
-                                int rotation = mView.getDisplay().getRotation();
-                                if (rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270) {
-                                    mView.resize(mOptimalSize.getWidth(), mOptimalSize.getHeight());
-                                } else {
-                                    mView.resize(mOptimalSize.getHeight(), mOptimalSize.getWidth());
+
+                                Point point = new Point();
+                                mView.getDisplay().getSize(point);
+                                int maxPreviewWidth = point.x;
+                                int maxPreviewHeight = point.y;
+                                if (maxPreviewWidth > MAX_PREVIEW_WIDTH) {
+                                    maxPreviewWidth = MAX_PREVIEW_WIDTH;
                                 }
 
-                                final Matrix matrix = mModel.getTransformMatrix(
-                                        rotation,
+                                if (maxPreviewHeight > MAX_PREVIEW_HEIGHT) {
+                                    maxPreviewHeight = MAX_PREVIEW_HEIGHT;
+                                }
+                                StreamConfigurationMap map = mModel.getCameraCharacteristics(mCamera).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                                Size[] outputSizes = map.getOutputSizes(SurfaceTexture.class);
+                                mOptimalPreviewSize = mModel.choosePreviewOptimalSize(
+                                        outputSizes,
                                         formerWidth,
                                         formerHeight,
-                                        mOptimalSize
+                                        maxPreviewWidth,
+                                        maxPreviewHeight,
+                                        Collections.max(
+                                                Arrays.asList(outputSizes),
+                                                new Comparator<Size>() {
+                                                    @Override
+                                                    public int compare(Size first, Size second) {
+                                                        return first.getHeight() * first.getWidth() - second.getWidth() * second.getHeight();
+                                                    }
+                                                }
+                                        )
+
                                 );
-                                mView.post(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        mView.setTransform(matrix);
-                                    }
-                                });
 
 
-//                                surface.setDefaultBufferSize(mOptimalSize.getWidth(), mOptimalSize.getHeight());
+                                configurePreviewTransformation(new Size(formerWidth, formerHeight), mOptimalPreviewSize);
 
                                 mStillPictureReader = ImageReader.newInstance(
-                                        mOptimalSize.getWidth(),
-                                        mOptimalSize.getHeight(),
+                                        mOptimalPreviewSize.getWidth(),
+                                        mOptimalPreviewSize.getHeight(),
                                         ImageFormat.JPEG,
                                         2
                                 );
 
-
                                 mDynamicPictureReader = ImageReader.newInstance(
-                                        mOptimalSize.getWidth(),
-                                        mOptimalSize.getHeight(),
+                                        tensorFlowOptimalSize.getWidth(),
+                                        tensorFlowOptimalSize.getHeight(),
                                         ImageFormat.YUV_420_888,
                                         2);
                                 mDynamicPictureReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
@@ -179,7 +221,7 @@ public class CameraPresenter {
                                             new Thread(new Runnable() {
                                                 @Override
                                                 public void run() {
-                                                    Bitmap bitmap = mModel.getImageFromYUV_420_888Format(image, mOptimalSize);
+                                                    Bitmap bitmap = mModel.getImageFromYUV_420_888Format(image, tensorFlowOptimalSize);
                                                     if (mDynamicImageCaptureCallback != null) {
                                                         mDynamicImageCaptureCallback.onGetDynamicImage(bitmap);
                                                     }
@@ -267,6 +309,11 @@ public class CameraPresenter {
                     mDynamicPictureReader = null;
                 }
                 mHandlerThread.quitSafely();
+                mHandlerThread.join();
+
+                Rect rect=new Rect();
+                mView.getGlobalVisibleRect(rect);
+                mView.getGlobalVisibleRect(rect,new Point());
             }
         } catch (InterruptedException e) {
             e.printStackTrace();
@@ -298,7 +345,7 @@ public class CameraPresenter {
     }
 
     private void showLog(String msg) {
-        if(CameraViewConstant.IS_DEBUG_MODE){
+        if (CameraViewConstant.IS_DEBUG_MODE) {
             Log.e(getClass().getSimpleName(), msg);
         }
     }

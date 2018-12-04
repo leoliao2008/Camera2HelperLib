@@ -14,8 +14,8 @@ import android.view.TextureView;
  * this book: <a href="https://commonsware.com/Android/">The Busy Coder's Guide to Android Development</a>
  */
 public class CameraView extends TextureView {
-    private int mTargetAspectWidth = -1;
-    private int mTargetAspectHeight = -1;
+    private int mTargetAspectWidth = 0;
+    private int mTargetAspectHeight = 0;
     private CameraPresenter mPresenter;
     private DynamicImageCaptureCallback mDynamicImageCaptureCallback;
 
@@ -53,7 +53,7 @@ public class CameraView extends TextureView {
 //        if (mTargetAspectWidth > 0 && mTargetAspectHeight > 0) {
 //            float currentRatio=width*1.f/height;
 //            float targetRatio= mTargetAspectWidth *1.f/ mTargetAspectHeight;
-//            if(currentRatio<targetRatio){
+//            if(currentRatio>targetRatio){
 //                height= (int) (width* mTargetAspectHeight*1.f / mTargetAspectWidth);
 //            }else {
 //                width= (int) (height* mTargetAspectWidth*1.f / mTargetAspectHeight);
@@ -62,14 +62,16 @@ public class CameraView extends TextureView {
 
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int height = MeasureSpec.getSize(heightMeasureSpec);
-        if(mTargetAspectHeight>0&&mTargetAspectWidth>0){
-            if (width > height * mTargetAspectWidth / mTargetAspectHeight) {
-                height=width * mTargetAspectHeight / mTargetAspectWidth;
+        if (0 == mTargetAspectWidth || 0 == mTargetAspectHeight) {
+            setMeasuredDimension(width, height);
+        } else {
+            if (width < height * mTargetAspectWidth / mTargetAspectHeight) {
+                setMeasuredDimension(width, width * mTargetAspectHeight / mTargetAspectWidth);
             } else {
-                width=height*mTargetAspectWidth/mTargetAspectHeight;
+                setMeasuredDimension(height * mTargetAspectWidth / mTargetAspectHeight, height);
             }
         }
-        setMeasuredDimension(width,height);
+
     }
 
 
