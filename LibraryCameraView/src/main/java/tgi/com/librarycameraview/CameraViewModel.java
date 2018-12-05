@@ -162,49 +162,7 @@ class CameraViewModel {
                     public void onConfigured(@NonNull CameraCaptureSession session) {
                         callback.onConfigured(builder, session);
                         try {
-                            session.setRepeatingRequest(builder.build(), new CameraCaptureSession.CaptureCallback() {
-                                @Override
-                                public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
-                                    super.onCaptureStarted(session, request, timestamp, frameNumber);
-                                    showLog("onCaptureStarted");
-                                }
-
-                                @Override
-                                public void onCaptureProgressed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull CaptureResult partialResult) {
-                                    super.onCaptureProgressed(session, request, partialResult);
-                                    showLog("onCaptureProgressed");
-                                }
-
-                                @Override
-                                public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
-                                    super.onCaptureCompleted(session, request, result);
-                                    showLog("onCaptureCompleted");
-                                }
-
-                                @Override
-                                public void onCaptureFailed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull CaptureFailure failure) {
-                                    super.onCaptureFailed(session, request, failure);
-                                    showLog("onCaptureFailed");
-                                }
-
-                                @Override
-                                public void onCaptureSequenceCompleted(@NonNull CameraCaptureSession session, int sequenceId, long frameNumber) {
-                                    super.onCaptureSequenceCompleted(session, sequenceId, frameNumber);
-                                    showLog("onCaptureSequenceCompleted");
-                                }
-
-                                @Override
-                                public void onCaptureSequenceAborted(@NonNull CameraCaptureSession session, int sequenceId) {
-                                    super.onCaptureSequenceAborted(session, sequenceId);
-                                    showLog("onCaptureSequenceAborted");
-                                }
-
-                                @Override
-                                public void onCaptureBufferLost(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull Surface target, long frameNumber) {
-                                    super.onCaptureBufferLost(session, request, target, frameNumber);
-                                    showLog("onCaptureBufferLost");
-                                }
-                            }, null);
+                            session.setRepeatingRequest(builder.build(), null, null);
                         } catch (CameraAccessException e) {
                             e.printStackTrace();
                             callback.onError(e);

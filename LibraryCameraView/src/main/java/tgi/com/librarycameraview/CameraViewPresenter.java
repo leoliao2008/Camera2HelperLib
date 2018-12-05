@@ -9,6 +9,7 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
 import android.os.HandlerThread;
+import android.os.Process;
 import android.support.annotation.NonNull;
 import android.util.Size;
 import android.view.Surface;
@@ -42,7 +43,7 @@ class CameraViewPresenter {
     CameraViewPresenter(CameraView2 view) {
         mView = view;
         mModel = new CameraViewModel();
-        mBgThread = new HandlerThread("CameraViewBgThread");
+        mBgThread = new HandlerThread("CameraViewBgThread",Process.THREAD_PRIORITY_BACKGROUND);
         mBgThread.start();
         mBgThreadHandler = new android.os.Handler(mBgThread.getLooper());
         mCameraManager = (CameraManager) mView.getContext().getSystemService(Context.CAMERA_SERVICE);
