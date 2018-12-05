@@ -310,10 +310,6 @@ public class CameraPresenter {
                 }
                 mHandlerThread.quitSafely();
                 mHandlerThread.join();
-
-                Rect rect=new Rect();
-                mView.getGlobalVisibleRect(rect);
-                mView.getGlobalVisibleRect(rect,new Point());
             }
         } catch (InterruptedException e) {
             e.printStackTrace();
