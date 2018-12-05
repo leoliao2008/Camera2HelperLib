@@ -109,8 +109,8 @@ class CameraViewModel {
         }
         showLog("screen rotation= "+degree);
         showLog("censor orientation = "+sensorOrientation);
-//        return (sensorOrientation + degree) / 360;
-        return degree;
+        return (sensorOrientation + degree+360) % 360;
+//        return degree;
     }
 
      Matrix getPreviewTransformMatrix(Size destSize, Size supportSize, int trueCameraOrientation) {

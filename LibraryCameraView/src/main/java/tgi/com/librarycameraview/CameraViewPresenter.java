@@ -101,7 +101,7 @@ class CameraViewPresenter {
                     new Size(width, height),
                     optimalSupportedSize,
                     trueSensorOrientation);
-//            mView.setTransform(matrix);
+            mView.setTransform(matrix);
             try {
                 boolean isAcquire = mCameraLock.tryAcquire(2500, TimeUnit.MILLISECONDS);
                 if (!isAcquire) {
