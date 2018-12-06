@@ -28,24 +28,20 @@ import java.util.concurrent.TimeUnit;
  * <p><b>Description:</b></p>
  */
 class CameraViewPresenter {
-    private CameraView2 mView;
+    private CameraView mView;
     private android.os.Handler mBgThreadHandler;
     private HandlerThread mBgThread;
     private CameraViewModel mModel;
     private CameraManager mCameraManager;
-    private SurfaceTexture mSurfaceTexture;
     private String mCameraId;
     private CameraDevice mCameraDevice;
     private Semaphore mCameraLock = new Semaphore(1);
     private CaptureRequest.Builder mRequestBuilder;
     private CameraCaptureSession mCaptureSession;
 
-    CameraViewPresenter(CameraView2 view) {
+    CameraViewPresenter(CameraView view) {
         mView = view;
         mModel = new CameraViewModel();
-        mBgThread = new HandlerThread("CameraViewBgThread",Process.THREAD_PRIORITY_BACKGROUND);
-        mBgThread.start();
-        mBgThreadHandler = new android.os.Handler(mBgThread.getLooper());
         mCameraManager = (CameraManager) mView.getContext().getSystemService(Context.CAMERA_SERVICE);
         try {
             mCameraId = mModel.getRearCameraId(mCameraManager);
@@ -57,51 +53,62 @@ class CameraViewPresenter {
 
     void openCamera() {
         if (mView.isAvailable()) {
+            showLog("mView is Available",0);
             initAndOpenCamera(mView.getSurfaceTexture(), mView.getWidth(), mView.getHeight());
         } else
-            mView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-                @Override
-                public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-                    initAndOpenCamera(surface, width, height);
-                }
+            showLog("mView is Not Available",0);
+        mView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+            @Override
+            public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+                initAndOpenCamera(surface, width, height);
+            }
 
-                @Override
-                public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+            @Override
+            public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
 
-                }
+            }
 
-                @Override
-                public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
-                    closeCamera();
-                    return false;
-                }
+            @Override
+            public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+                showLog("onSurfaceTextureDestroyed",0);
+                closeCamera();
+                return true;
+            }
 
-                @Override
-                public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+            @Override
+            public void onSurfaceTextureUpdated(SurfaceTexture surface) {
 
-                }
-            });
-
+            }
+        });
     }
 
-    private void initAndOpenCamera(SurfaceTexture surface, int width, int height) {
-        mSurfaceTexture = surface;
+    private void initBgHandler() {
+        mBgThread = new HandlerThread("CameraViewBgThread", Process.THREAD_PRIORITY_BACKGROUND);
+        mBgThread.start();
+        mBgThreadHandler = new android.os.Handler(mBgThread.getLooper());
+    }
+
+    private void initAndOpenCamera(final SurfaceTexture surface, int width, int height) {
         try {
-            int trueSensorOrientation = mModel.getTrueSensorOrientation(
-                    mCameraManager,
-                    mCameraId,
-                    mView.getDisplay().getRotation());
+            initBgHandler();
+            int deviceRotation = mView.getDisplay().getRotation();
             Size optimalSupportedSize = mModel.getOptimalSupportedSize(
                     mCameraManager,
                     mCameraId,
                     width,
                     height,
-                    trueSensorOrientation);
+                    deviceRotation);
+            int trueSensorOrientation = mModel.getTrueSensorOrientation(
+                    mCameraManager,
+                    mCameraId,
+                    deviceRotation);
             Matrix matrix = mModel.getPreviewTransformMatrix(
-                    new Size(width, height),
                     optimalSupportedSize,
+                    new Size(width, height),
+                    deviceRotation,
                     trueSensorOrientation);
             mView.setTransform(matrix);
+
             try {
                 boolean isAcquire = mCameraLock.tryAcquire(2500, TimeUnit.MILLISECONDS);
                 if (!isAcquire) {
@@ -124,6 +131,7 @@ class CameraViewPresenter {
 
                                         @Override
                                         public void onConfigureFailed(CameraCaptureSession session) {
+                                            showLog("onConfigureFailed",0);
                                             closeCamera();
 
                                         }
@@ -133,7 +141,7 @@ class CameraViewPresenter {
                                             closeCamera();
                                             mView.onError(e);
                                         }
-                                    }, new Surface(mView.getSurfaceTexture()));
+                                    }, new Surface(surface));
                                 } catch (CameraAccessException e) {
                                     e.printStackTrace();
                                     mView.onError(e);
@@ -143,6 +151,7 @@ class CameraViewPresenter {
 
                             @Override
                             public void onDisconnected(@NonNull CameraDevice camera) {
+                                showLog("onDisconnected",0);
                                 mCameraLock.release();
                                 closeCamera();
 
@@ -150,6 +159,7 @@ class CameraViewPresenter {
 
                             @Override
                             public void onError(@NonNull CameraDevice camera, int error) {
+                                showLog("onError",0);
                                 mCameraLock.release();
                                 closeCamera();
 
@@ -171,7 +181,12 @@ class CameraViewPresenter {
 
     void closeCamera() {
         if (mCameraLock.tryAcquire()) {
+            showLog("closeCamera",0);
             try {
+                if (mCameraDevice != null) {
+                    mCameraDevice.close();
+                    mCameraDevice = null;
+                }
                 if (mCaptureSession != null) {
                     mCaptureSession.close();
                     mCaptureSession = null;
@@ -180,7 +195,6 @@ class CameraViewPresenter {
                     mCameraDevice.close();
                     mCameraDevice = null;
                 }
-                mSurfaceTexture.release();
                 mBgThread.quitSafely();
                 mBgThread.join();
             } catch (InterruptedException e) {
@@ -188,5 +202,9 @@ class CameraViewPresenter {
             }
             mCameraLock.release();
         }
+    }
+
+    void showLog(String msg,int...logCodes) {
+        LogUtil.showLog(getClass().getSimpleName(), msg,logCodes);
     }
 }

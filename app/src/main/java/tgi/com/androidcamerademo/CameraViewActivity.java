@@ -1,5 +1,7 @@
 package tgi.com.androidcamerademo;
 
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -13,6 +15,11 @@ import tgi.com.librarycameratwo.TakePicCallback;
 public class CameraViewActivity extends AppCompatActivity {
     private ImageView mImageView;
     private CameraView mCameraView;
+
+    public static void start(Context context) {
+        Intent starter = new Intent(context, CameraViewActivity.class);
+        context.startActivity(starter);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {

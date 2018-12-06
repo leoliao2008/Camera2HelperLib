@@ -35,22 +35,22 @@ import java.util.Collections;
  */
 class CameraViewModel {
 
-    Size getOptimalSupportedSize(CameraManager manager, String cameraId, int textureWidth, int textureHeight, int trueSensorOrientation) throws CameraAccessException {
+    Size getOptimalSupportedSize(CameraManager manager, String cameraId, int textureWidth, int textureHeight, int deviceRotation) throws CameraAccessException {
         CameraCharacteristics chars = manager.getCameraCharacteristics(cameraId);
         StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-        Size[] supportedTextureSizes = map.getOutputSizes(SurfaceTexture.class);
+        Size[] supportedTextureSizes = map.getOutputSizes(ImageFormat.JPEG);
         int compareWidth;
         int compareHeight;
         //卧倒的时候
-        if (trueSensorOrientation == 90 || trueSensorOrientation == 270) {
+        if (deviceRotation == Surface.ROTATION_90 || deviceRotation == Surface.ROTATION_270) {
             compareWidth = textureWidth;
             compareHeight = textureHeight;
-            showLog("卧倒的时候");
+            showLog( "卧倒的时候",0);
         } else {
             //直立的时候
             compareWidth = textureHeight;
             compareHeight = textureWidth;
-            showLog("直立的时候");
+            showLog("直立的时候",0);
         }
         float ratio = compareWidth * 1.0f / compareHeight;
         ArrayList<Size> fitsRatio = new ArrayList<>();
@@ -67,10 +67,14 @@ class CameraViewModel {
             }
         }
         if (fitsRatio.size() > 0) {
-            return Collections.max(fitsRatio, new ComparatorByDeviation(ratio));
+            Size size = Collections.max(fitsRatio, new ComparatorByDeviation(ratio));
+            showLog("fitsRatio.size() > 0 width=" + size.getWidth() + " height=" + size.getHeight(),0);
+            return size;
         }
         if (notFitsRatioAndSmaller.size() > 0) {
-            return Collections.max(notFitsRatioAndSmaller, new ComparatorBySize());
+            Size size = Collections.max(notFitsRatioAndSmaller, new ComparatorBySize());
+            showLog( "notFitsRatioAndSmaller.size() > 0 width=" + size.getWidth() + " height=" + size.getHeight(),0);
+            return size;
         }
         return new Size(640, 480);
     }
@@ -89,11 +93,11 @@ class CameraViewModel {
         return list[0];
     }
 
-    int getTrueSensorOrientation(CameraManager manager, String cameraId, int screenOrientation) throws CameraAccessException {
+    int getTrueSensorOrientation(CameraManager manager, String cameraId, int deviceRotation) throws CameraAccessException {
         CameraCharacteristics chars = manager.getCameraCharacteristics(cameraId);
         Integer sensorOrientation = chars.get(CameraCharacteristics.SENSOR_ORIENTATION);
         int degree = 0;
-        switch (screenOrientation) {
+        switch (deviceRotation) {
             case Surface.ROTATION_0:
                 degree = 0;
                 break;
@@ -107,34 +111,56 @@ class CameraViewModel {
                 degree = 270;
                 break;
         }
-        showLog("screen rotation= "+degree);
-        showLog("censor orientation = "+sensorOrientation);
-        return (sensorOrientation + degree+360) % 360;
-//        return degree;
+        showLog("screen rotation= " + degree,0);
+        showLog( "censor orientation = " + sensorOrientation,0);
+        return (sensorOrientation + degree + 360) % 360;
     }
 
-     Matrix getPreviewTransformMatrix(Size destSize, Size supportSize, int trueCameraOrientation) {
+    Matrix getPreviewTransformMatrix(Size supportedOptimalSize, Size actualDestSize, int deviceRotation, int sensorOrientation) {
         Matrix matrix = new Matrix();
-        RectF beAppliedTo = new RectF(0, 0, destSize.getWidth(), destSize.getHeight());
-        RectF beAppliedWith = new RectF(0, 0, supportSize.getWidth(), supportSize.getHeight());
-        beAppliedWith.offset(beAppliedTo.centerX() - beAppliedWith.centerX(),
-                beAppliedTo.centerY() - beAppliedWith.centerY());
-        matrix.setRectToRect(beAppliedWith,beAppliedTo, Matrix.ScaleToFit.START);
-        matrix.postRotate(trueCameraOrientation,beAppliedTo.centerX(),beAppliedTo.centerY());
+        RectF beAppliedFrom = new RectF(0, 0, supportedOptimalSize.getWidth(), supportedOptimalSize.getHeight());
+        RectF beAppliedTo;
+        if (deviceRotation == Surface.ROTATION_0 || deviceRotation == Surface.ROTATION_180) {
+            beAppliedTo = new RectF(0, 0, actualDestSize.getHeight(), actualDestSize.getWidth());
+        } else {
+            beAppliedTo = new RectF(0, 0, actualDestSize.getWidth(), actualDestSize.getHeight());
+        }
+
+        beAppliedFrom.offset(beAppliedTo.centerX() - beAppliedFrom.centerX(),
+                beAppliedTo.centerY() - beAppliedFrom.centerY());
+
+        matrix.setRectToRect(beAppliedFrom, beAppliedTo, Matrix.ScaleToFit.FILL);
+        switch (deviceRotation) {
+            case Surface.ROTATION_0:
+                break;
+            case Surface.ROTATION_90:
+                matrix.postRotate(270, beAppliedTo.centerX(), beAppliedTo.centerY());
+                break;
+            case Surface.ROTATION_180:
+                matrix.postRotate(180, beAppliedTo.centerX(), beAppliedTo.centerY());
+                break;
+            case Surface.ROTATION_270:
+                matrix.postRotate(90, beAppliedTo.centerX(), beAppliedTo.centerY());
+                break;
+        }
+
         float scale;
         float scaleW;
         float scaleH;
-        //卧倒的时候
-        if(trueCameraOrientation==90||trueCameraOrientation==270){
-            scaleW=destSize.getWidth() * 1.0f / supportSize.getWidth();
-            scaleH=destSize.getHeight() * 1.0f / supportSize.getHeight();
-        }else {
-            //直立的时候
-            scaleW=destSize.getWidth() * 1.0f / supportSize.getHeight();
-            scaleH=destSize.getHeight() * 1.0f / supportSize.getWidth();
-        }
-        scale=Math.max(scaleW,scaleH);
-        matrix.postScale(scale,scale,beAppliedTo.centerX(),beAppliedTo.centerY());
+        scaleW = beAppliedTo.right * 1.0f / beAppliedFrom.right;
+        scaleH = beAppliedTo.bottom * 1.0f / beAppliedFrom.bottom;
+        //        //卧倒的时候
+        //        if (trueSensorOrientation == 90 || trueSensorOrientation == 270) {
+        //            scaleW = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getWidth();
+        //            scaleH = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getHeight();
+        //        } else {
+        //            //直立的时候
+        //            scaleW = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getHeight();
+        //            scaleH = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getWidth();
+        //        }
+        scale = Math.min(scaleW, scaleH);
+        matrix.postScale(scale, scale, beAppliedFrom.centerX(), beAppliedFrom.centerY());
+        //        showLog("getPreviewTransformMatrix->scale=" + scale);
         return matrix;
     }
 
@@ -148,20 +174,20 @@ class CameraViewModel {
         );
     }
 
-    void createPreviewSession(CameraDevice camera, final CameraCaptureSessionStateCallback callback, Surface... outputSurfaces) throws CameraAccessException {
-        final CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-        for (Surface surface : outputSurfaces) {
-            builder.addTarget(surface);
-        }
-        builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-        builder.build();
+    void createPreviewSession(final CameraDevice camera, final CameraCaptureSessionStateCallback callback, final Surface... outputSurfaces) throws CameraAccessException {
+
         camera.createCaptureSession(
                 Arrays.asList(outputSurfaces),
                 new CameraCaptureSession.StateCallback() {
                     @Override
                     public void onConfigured(@NonNull CameraCaptureSession session) {
-                        callback.onConfigured(builder, session);
                         try {
+                            CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+                            for (Surface surface : outputSurfaces) {
+                                builder.addTarget(surface);
+                            }
+                            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+                            callback.onConfigured(builder, session);
                             session.setRepeatingRequest(builder.build(), null, null);
                         } catch (CameraAccessException e) {
                             e.printStackTrace();
@@ -179,7 +205,7 @@ class CameraViewModel {
         );
     }
 
-    void showLog(String msg){
-        LogUtil.showLog(getClass().getSimpleName(),msg);
+    void showLog(String msg, int... requestCode) {
+        LogUtil.showLog(getClass().getSimpleName(), msg, requestCode);
     }
 }

@@ -15,23 +15,24 @@ import android.widget.Toast;
  * <i>AndroidCameraDemo</i>
  * <p><b>Description:</b></p>
  */
-public class CameraView2 extends TextureView {
+public class CameraView extends TextureView {
     private CameraViewPresenter mPresenter;
     private int mWidth;
     private int mHeight;
 
-    public CameraView2(Context context) {
+    public CameraView(Context context) {
         this(context, null);
     }
 
-    public CameraView2(Context context, AttributeSet attrs) {
+    public CameraView(Context context, AttributeSet attrs) {
         this(context, attrs, 0);
     }
 
-    public CameraView2(Context context, AttributeSet attrs, int defStyleAttr) {
+    public CameraView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         mPresenter = new CameraViewPresenter(this);
     }
+
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
@@ -41,30 +42,21 @@ public class CameraView2 extends TextureView {
     }
 
     @Override
-    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        if(hasWindowFocus){
+            mPresenter.openCamera();
+        }else {
+            mPresenter.closeCamera();
+        }
     }
 
-    @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        return super.onTouchEvent(event);
-    }
-
-    @Override
-    protected void onAttachedToWindow() {
-        super.onAttachedToWindow();
-        mPresenter.openCamera();
-    }
-
-    @Override
-    protected void onDetachedFromWindow() {
-        super.onDetachedFromWindow();
-        mPresenter.closeCamera();
-
-    }
 
     public void onError(Exception e) {
         Toast.makeText(getContext().getApplicationContext(), e.getMessage(), Toast.LENGTH_SHORT).show();
+    }
 
+    void showLog(String msg,int... logCodes){
+        LogUtil.showLog(getClass().getSimpleName(),msg,logCodes);
     }
 }
