@@ -149,18 +149,9 @@ class CameraViewModel {
         float scaleH;
         scaleW = beAppliedTo.right * 1.0f / beAppliedFrom.right;
         scaleH = beAppliedTo.bottom * 1.0f / beAppliedFrom.bottom;
-        //        //卧倒的时候
-        //        if (trueSensorOrientation == 90 || trueSensorOrientation == 270) {
-        //            scaleW = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getWidth();
-        //            scaleH = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getHeight();
-        //        } else {
-        //            //直立的时候
-        //            scaleW = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getHeight();
-        //            scaleH = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getWidth();
-        //        }
         scale = Math.min(scaleW, scaleH);
+        showLog("scale ="+scale,1);
         matrix.postScale(scale, scale, beAppliedFrom.centerX(), beAppliedFrom.centerY());
-        //        showLog("getPreviewTransformMatrix->scale=" + scale);
         return matrix;
     }
 
@@ -205,7 +196,7 @@ class CameraViewModel {
         );
     }
 
-    void showLog(String msg, int... requestCode) {
-        LogUtil.showLog(getClass().getSimpleName(), msg, requestCode);
+    void showLog(String msg, int... logCode) {
+        LogUtil.showLog(getClass().getSimpleName(), msg, logCode);
     }
 }
