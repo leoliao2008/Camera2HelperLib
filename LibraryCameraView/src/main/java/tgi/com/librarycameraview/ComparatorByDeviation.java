@@ -22,8 +22,8 @@ public class ComparatorByDeviation implements Comparator<Size> {
 
     @Override
     public int compare(Size o1, Size o2) {
-        float f1 = o1.getWidth() * 1.0f / o1.getHeight();
-        float f2 = o2.getWidth() * 1.0f / o2.getHeight();
+        float f1 = Math.abs(o1.getWidth() * 1.0f / o1.getHeight()-mTargetValue);
+        float f2 = Math.abs(o2.getWidth() * 1.0f / o2.getHeight()-mTargetValue);
         return f1 - f2 == 0 ? 0 : (f1 - f2 < 0 ? 1 : -1);
     }
 }
