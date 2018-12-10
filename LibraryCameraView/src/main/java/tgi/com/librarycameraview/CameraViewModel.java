@@ -4,16 +4,12 @@ import android.annotation.SuppressLint;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.RectF;
-import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
-import android.hardware.camera2.CaptureFailure;
 import android.hardware.camera2.CaptureRequest;
-import android.hardware.camera2.CaptureResult;
-import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.os.Handler;
 import android.support.annotation.NonNull;
@@ -38,42 +34,47 @@ class CameraViewModel {
     Size getOptimalSupportedSize(CameraManager manager, String cameraId, int textureWidth, int textureHeight, int deviceRotation) throws CameraAccessException {
         CameraCharacteristics chars = manager.getCameraCharacteristics(cameraId);
         StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-        Size[] supportedTextureSizes = map.getOutputSizes(ImageFormat.JPEG);
+        Size[] supportedSizes = map.getOutputSizes(ImageFormat.JPEG);
         int compareWidth;
         int compareHeight;
         //卧倒的时候
         if (deviceRotation == Surface.ROTATION_90 || deviceRotation == Surface.ROTATION_270) {
             compareWidth = textureWidth;
             compareHeight = textureHeight;
-            showLog( "卧倒的时候",0);
         } else {
             //直立的时候
             compareWidth = textureHeight;
             compareHeight = textureWidth;
-            showLog("直立的时候",0);
         }
         float ratio = compareWidth * 1.0f / compareHeight;
         ArrayList<Size> fitsRatio = new ArrayList<>();
         ArrayList<Size> notFitsRatioAndSmaller = new ArrayList<>();
-        for (Size size : supportedTextureSizes) {
+        for (Size size : supportedSizes) {
             if (size.getWidth() == compareWidth && size.getHeight() == compareHeight) {
                 return size;
             } else {
-                if (size.getWidth() * 1.0f / size.getHeight() == ratio) {
-                    fitsRatio.add(size);
-                } else if (size.getWidth() <= compareWidth && size.getHeight() <= compareHeight) {
+                float tempRatio = size.getWidth() * 1.0f / size.getHeight();
+                if (Math.abs(tempRatio - ratio) <= 0.01) {//差不多就行了，不可能尾数都一样
+                    if (size.getWidth() >= compareWidth * 0.75
+                            && size.getWidth() <= compareWidth * 1.25
+                            && size.getHeight() >= compareHeight * 0.75
+                            && size.getHeight() <= compareHeight * 1.25) {
+                        fitsRatio.add(size);
+                    }
+                } else if (size.getWidth() <= compareWidth
+                        && size.getHeight() <= compareHeight) {
                     notFitsRatioAndSmaller.add(size);
                 }
             }
         }
         if (fitsRatio.size() > 0) {
-            Size size = Collections.max(fitsRatio, new ComparatorByDeviation(ratio));
-            showLog("fitsRatio.size() > 0 width=" + size.getWidth() + " height=" + size.getHeight(),0);
+            Size size = Collections.max(fitsRatio, new ComparatorBySize());
+            showLog("fitsRatio.size() > 0 width=" + size.getWidth() + " height=" + size.getHeight(), 0);
             return size;
         }
         if (notFitsRatioAndSmaller.size() > 0) {
-            Size size = Collections.max(notFitsRatioAndSmaller, new ComparatorBySize());
-            showLog( "notFitsRatioAndSmaller.size() > 0 width=" + size.getWidth() + " height=" + size.getHeight(),0);
+            Size size = Collections.min(notFitsRatioAndSmaller, new ComparatorByRatio(ratio));
+            showLog("notFitsRatioAndSmaller.size() > 0 width=" + size.getWidth() + " height=" + size.getHeight(), 0);
             return size;
         }
         return new Size(640, 480);
@@ -111,47 +112,59 @@ class CameraViewModel {
                 degree = 270;
                 break;
         }
-        showLog("screen rotation= " + degree,0);
-        showLog( "censor orientation = " + sensorOrientation,0);
+        showLog("screen rotation= " + degree, 0);
+        showLog("censor orientation = " + sensorOrientation, 0);
         return (sensorOrientation + degree + 360) % 360;
     }
 
-    Matrix getPreviewTransformMatrix(Size supportedOptimalSize, Size actualDestSize, int deviceRotation, int sensorOrientation) {
+    Matrix genPreviewTransformMatrix(Size supportedOptimalSize, Size actualDestSize, int deviceRotation, int sensorOrientation) {
         Matrix matrix = new Matrix();
-        RectF beAppliedFrom = new RectF(0, 0, supportedOptimalSize.getWidth(), supportedOptimalSize.getHeight());
-        RectF beAppliedTo;
-        if (deviceRotation == Surface.ROTATION_0 || deviceRotation == Surface.ROTATION_180) {
-            beAppliedTo = new RectF(0, 0, actualDestSize.getHeight(), actualDestSize.getWidth());
-        } else {
-            beAppliedTo = new RectF(0, 0, actualDestSize.getWidth(), actualDestSize.getHeight());
-        }
+        RectF beAppliedFrom = new RectF(0, 0, supportedOptimalSize.getHeight(), supportedOptimalSize.getWidth());
+        RectF beAppliedTo = new RectF(0, 0, actualDestSize.getWidth(), actualDestSize.getHeight());
+
 
         beAppliedFrom.offset(beAppliedTo.centerX() - beAppliedFrom.centerX(),
                 beAppliedTo.centerY() - beAppliedFrom.centerY());
 
-        matrix.setRectToRect(beAppliedFrom, beAppliedTo, Matrix.ScaleToFit.FILL);
-        switch (deviceRotation) {
-            case Surface.ROTATION_0:
-                break;
-            case Surface.ROTATION_90:
-                matrix.postRotate(270, beAppliedTo.centerX(), beAppliedTo.centerY());
-                break;
-            case Surface.ROTATION_180:
-                matrix.postRotate(180, beAppliedTo.centerX(), beAppliedTo.centerY());
-                break;
-            case Surface.ROTATION_270:
-                matrix.postRotate(90, beAppliedTo.centerX(), beAppliedTo.centerY());
-                break;
+        if (deviceRotation == Surface.ROTATION_90 || deviceRotation == Surface.ROTATION_270) {
+            matrix.setRectToRect(beAppliedFrom, beAppliedTo, Matrix.ScaleToFit.FILL);
+            float scale = Math.max(
+                    actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getWidth(),
+                    actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getHeight());
+            matrix.postScale(scale,scale,beAppliedTo.centerX(), beAppliedTo.centerY());
         }
+        matrix.postRotate(360-deviceRotation*90, beAppliedTo.centerX(), beAppliedTo.centerY());
 
-        float scale;
-        float scaleW;
-        float scaleH;
-        scaleW = beAppliedTo.right * 1.0f / beAppliedFrom.right;
-        scaleH = beAppliedTo.bottom * 1.0f / beAppliedFrom.bottom;
-        scale = Math.min(scaleW, scaleH);
-        showLog("scale ="+scale,1);
-        matrix.postScale(scale, scale, beAppliedFrom.centerX(), beAppliedFrom.centerY());
+
+        //        float scale;
+        //        float scaleW = 1;
+        //        float scaleH = 1;
+        //
+        //        switch (deviceRotation) {
+        //            case Surface.ROTATION_0:
+        //                scaleW = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getWidth();
+        //                scaleH = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getHeight();
+        //                break;
+        //            case Surface.ROTATION_90:
+        //                matrix.postRotate(270, beAppliedTo.centerX(), beAppliedTo.centerY());
+        //                scaleW = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getWidth();
+        //                scaleH = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getHeight();
+        //                break;
+        //            case Surface.ROTATION_180:
+        //                matrix.postRotate(180, beAppliedTo.centerX(), beAppliedTo.centerY());
+        //                scaleW = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getWidth();
+        //                scaleH = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getHeight();
+        //                break;
+        //            case Surface.ROTATION_270:
+        //                matrix.postRotate(90, beAppliedTo.centerX(), beAppliedTo.centerY());
+        //                scaleW = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getWidth();
+        //                scaleH = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getHeight();
+        //                break;
+        //        }
+        //
+        //        scale = Math.max(scaleW, scaleH);
+        //        showLog("scale =" + scale, 1);
+        //        matrix.postScale(scale, scale, beAppliedFrom.centerX(), beAppliedFrom.centerY());
         return matrix;
     }
 

@@ -13,10 +13,10 @@ import java.util.Comparator;
  * <i>AndroidCameraDemo</i>
  * <p><b>Description:</b></p>
  */
-public class ComparatorByDeviation implements Comparator<Size> {
+public class ComparatorByRatio implements Comparator<Size> {
     private float mTargetValue;
 
-    public ComparatorByDeviation(float targetValue) {
+    public ComparatorByRatio(float targetValue) {
         mTargetValue = targetValue;
     }
 
@@ -24,6 +24,6 @@ public class ComparatorByDeviation implements Comparator<Size> {
     public int compare(Size o1, Size o2) {
         float f1 = Math.abs(o1.getWidth() * 1.0f / o1.getHeight()-mTargetValue);
         float f2 = Math.abs(o2.getWidth() * 1.0f / o2.getHeight()-mTargetValue);
-        return f1 - f2 == 0 ? 0 : (f1 - f2 < 0 ? 1 : -1);
+        return f2 - f1 == 0 ? 0 : (f2 - f1 > 0 ? -1 : 1);
     }
 }

@@ -102,11 +102,13 @@ class CameraViewPresenter {
                     mCameraManager,
                     mCameraId,
                     deviceRotation);
-            Matrix matrix = mModel.getPreviewTransformMatrix(
+            Matrix matrix = mModel.genPreviewTransformMatrix(
                     optimalSupportedSize,
                     new Size(width, height),
                     deviceRotation,
                     trueSensorOrientation);
+            mView.getSurfaceTexture().setDefaultBufferSize(optimalSupportedSize.getWidth(),optimalSupportedSize.getHeight());
+            mView.resetWidthHeightRatio(optimalSupportedSize.getWidth(),optimalSupportedSize.getHeight());
             mView.setTransform(matrix);
 
             try {
