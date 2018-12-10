@@ -128,43 +128,12 @@ class CameraViewModel {
 
         if (deviceRotation == Surface.ROTATION_90 || deviceRotation == Surface.ROTATION_270) {
             matrix.setRectToRect(beAppliedFrom, beAppliedTo, Matrix.ScaleToFit.FILL);
-            float scale = Math.max(
+            float scale = Math.min(
                     actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getWidth(),
                     actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getHeight());
             matrix.postScale(scale,scale,beAppliedTo.centerX(), beAppliedTo.centerY());
         }
         matrix.postRotate(360-deviceRotation*90, beAppliedTo.centerX(), beAppliedTo.centerY());
-
-
-        //        float scale;
-        //        float scaleW = 1;
-        //        float scaleH = 1;
-        //
-        //        switch (deviceRotation) {
-        //            case Surface.ROTATION_0:
-        //                scaleW = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getWidth();
-        //                scaleH = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getHeight();
-        //                break;
-        //            case Surface.ROTATION_90:
-        //                matrix.postRotate(270, beAppliedTo.centerX(), beAppliedTo.centerY());
-        //                scaleW = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getWidth();
-        //                scaleH = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getHeight();
-        //                break;
-        //            case Surface.ROTATION_180:
-        //                matrix.postRotate(180, beAppliedTo.centerX(), beAppliedTo.centerY());
-        //                scaleW = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getWidth();
-        //                scaleH = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getHeight();
-        //                break;
-        //            case Surface.ROTATION_270:
-        //                matrix.postRotate(90, beAppliedTo.centerX(), beAppliedTo.centerY());
-        //                scaleW = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getWidth();
-        //                scaleH = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getHeight();
-        //                break;
-        //        }
-        //
-        //        scale = Math.max(scaleW, scaleH);
-        //        showLog("scale =" + scale, 1);
-        //        matrix.postScale(scale, scale, beAppliedFrom.centerX(), beAppliedFrom.centerY());
         return matrix;
     }
 

@@ -108,7 +108,7 @@ class CameraViewPresenter {
                     deviceRotation,
                     trueSensorOrientation);
             mView.getSurfaceTexture().setDefaultBufferSize(optimalSupportedSize.getWidth(),optimalSupportedSize.getHeight());
-            mView.resetWidthHeightRatio(optimalSupportedSize.getWidth(),optimalSupportedSize.getHeight());
+//            mView.resetWidthHeightRatio(optimalSupportedSize.getWidth(),optimalSupportedSize.getHeight());
             mView.setTransform(matrix);
 
             try {

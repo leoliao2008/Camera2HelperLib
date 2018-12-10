@@ -19,6 +19,7 @@ import android.media.ImageReader;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Process;
+import android.os.SystemClock;
 import android.support.annotation.NonNull;
 import android.util.Log;
 import android.util.Size;
@@ -105,25 +106,26 @@ public class CameraPresenter {
         });
     }
 
-    private void configurePreviewTransformation(Size formerSize, Size targetSize) {
-        int rotation = mView.getDisplay().getRotation();
+    private void configurePreviewTransformation(final Size formerSize, final Size targetSize) {
+        final int rotation = mView.getDisplay().getRotation();
         if (rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270) {
             mView.resize(targetSize.getWidth(), targetSize.getHeight());
         } else {
             mView.resize(targetSize.getHeight(), targetSize.getWidth());
         }
+        mView.getSurfaceTexture().setDefaultBufferSize(targetSize.getWidth(), targetSize.getHeight());
 
-        final Matrix matrix = mModel.getPreviewTransformMatrix(
-                rotation,
-                formerSize,
-                targetSize
-        );
-        mView.post(new Runnable() {
+        mView.postDelayed(new Runnable() {
             @Override
             public void run() {
+                final Matrix matrix = mModel.getPreviewTransformMatrix(
+                        rotation,
+                        formerSize,
+                        new Size(mView.getHeight(), mView.getWidth())
+                );
                 mView.setTransform(matrix);
             }
-        });
+        },500);
     }
 
     private void openCamera(final SurfaceTexture surface) {
@@ -195,6 +197,7 @@ public class CameraPresenter {
 
                                 );
 
+                                surface.setDefaultBufferSize(mOptimalPreviewSize.getWidth(),mOptimalPreviewSize.getHeight() );
 
                                 configurePreviewTransformation(new Size(formerWidth, formerHeight), mOptimalPreviewSize);
 

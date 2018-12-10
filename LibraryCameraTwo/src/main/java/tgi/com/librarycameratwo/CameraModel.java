@@ -241,12 +241,12 @@ public class CameraModel {
 
         targetFrame.offset(centerX - targetFrame.centerX(), centerY - targetFrame.centerY());
         matrix.setRectToRect(formerFrame, targetFrame, Matrix.ScaleToFit.FILL);
-        float scale = Math.max(
-                (float) textureViewFormerHeight / targetSize.getHeight(),
-                (float) textureViewFormerWidth / targetSize.getWidth());
-        matrix.postScale(scale, scale, centerX, centerY);
+        float scale = Math.min(
+                (float) textureViewFormerHeight *1.0f/ targetSize.getHeight(),
+                (float) textureViewFormerWidth *1.0f/ targetSize.getWidth());
         if (Surface.ROTATION_90 == deviceRotation || Surface.ROTATION_270 == deviceRotation) {
             matrix.postRotate(90 * (deviceRotation - 2), centerX, centerY);
+            matrix.postScale(scale, scale, centerX, centerY);
         } else if (Surface.ROTATION_180 == deviceRotation) {
             matrix.postRotate(180, centerX, centerY);
         }
