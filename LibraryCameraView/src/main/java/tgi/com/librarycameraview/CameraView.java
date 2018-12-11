@@ -64,7 +64,8 @@ public class CameraView extends TextureView {
             }
         }
         setMeasuredDimension(width, height);
-        //每次requestLayout()时都触发这个回调，在回调中调整预览图尺寸
+        //每次requestLayout()时都触发这个回调，在回调中调整预览图尺寸。如果在onSizeChange中调用这个回调，前后尺寸一致时不会触发，
+        //但我需要每次都触发。
         if (mSizeChangeListener != null) {
             mSizeChangeListener.onSizeChanged(width, height);
         }
