@@ -151,7 +151,7 @@ class CameraViewModel {
                               final Surface stillPicSurface) throws CameraAccessException {
 
         camera.createCaptureSession(
-                Arrays.asList(preViewSurface,stillPicSurface),
+                Arrays.asList(preViewSurface,stillPicSurface),//这里需要把用到的surface都加进来，否则surface今后获取不到图像。
                 new CameraCaptureSession.StateCallback() {
                     @Override
                     public void onConfigured(@NonNull CameraCaptureSession session) {
