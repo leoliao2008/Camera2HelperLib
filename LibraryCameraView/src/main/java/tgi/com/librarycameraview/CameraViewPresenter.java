@@ -90,9 +90,21 @@ class CameraViewPresenter {
     }
 
     private void initAndOpenCamera(final SurfaceTexture surface, int width, int height) {
+        //这是保证打开摄像头的操作和关闭摄像头的操作的不会同时进行，造成冲突。
+        boolean isAcquire = false;
         try {
-            initBgHandler();
+            isAcquire = mCameraLock.tryAcquire(2500, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        if (!isAcquire) {
+            showLog("isAcquire = false, abort",0);
+            return;
+        }
 
+        initBgHandler();
+
+        try {
             final int deviceRotation = mView.getDisplay().getRotation();
             //判断当前视图是横屏还是竖屏，因为摄像头只有横屏，需要匹配最接近的一个相片尺寸。
             final boolean isSwapWidthAndHeight = (deviceRotation == Surface.ROTATION_0 || deviceRotation == Surface.ROTATION_180);
@@ -133,68 +145,59 @@ class CameraViewPresenter {
                     mView.setTransform(matrix);
 
                     try {
-                        //这是保证打开摄像头的操作和关闭摄像头的操作的不会同时进行，造成冲突。
-                        boolean isAcquire = mCameraLock.tryAcquire(2500, TimeUnit.MILLISECONDS);
-                        if (!isAcquire) {
-                            return;
-                        }
-                        try {
-                            //预览尺寸和视图尺寸已经选好，调整好，不会拉伸变形后，正式打开摄像头。
-                            mModel.openCamera(mCameraManager, mCameraId, new CameraDevice.StateCallback() {
-                                        @Override
-                                        public void onOpened(@NonNull CameraDevice camera) {
-                                            mCameraLock.release();
-                                            mCameraDevice = camera;
-                                            try {
-                                                mModel.createPreviewSession(camera, new CameraCaptureSessionStateCallback() {
-                                                    @Override
-                                                    public void onConfigured(CaptureRequest.Builder builder,
-                                                                             CameraCaptureSession session) {
-                                                        mRequestBuilder = builder;
-                                                        mCaptureSession = session;
+                        //预览尺寸和视图尺寸已经选好，调整好，不会拉伸变形后，正式打开摄像头。
+                        mModel.openCamera(mCameraManager, mCameraId, new CameraDevice.StateCallback() {
+                                    @Override
+                                    public void onOpened(@NonNull CameraDevice camera) {
+                                        mCameraLock.release();
+                                        mCameraDevice = camera;
+                                        try {
+                                            mModel.createPreviewSession(camera, new CameraCaptureSessionStateCallback() {
+                                                @Override
+                                                public void onConfigured(CaptureRequest.Builder builder,
+                                                                         CameraCaptureSession session) {
+                                                    mRequestBuilder = builder;
+                                                    mCaptureSession = session;
 
-                                                    }
+                                                }
 
-                                                    @Override
-                                                    public void onConfigureFailed(CameraCaptureSession session) {
-                                                        closeCamera();
+                                                @Override
+                                                public void onConfigureFailed(CameraCaptureSession session) {
+                                                    closeCamera();
 
-                                                    }
+                                                }
 
-                                                    @Override
-                                                    public void onError(Exception e) {
-                                                        closeCamera();
-                                                        mView.onError(e);
-                                                    }
-                                                }, new Surface(surface));
-                                            } catch (CameraAccessException e) {
-                                                e.printStackTrace();
-                                                mView.onError(e);
-                                            }
-
+                                                @Override
+                                                public void onError(Exception e) {
+                                                    closeCamera();
+                                                    mView.onError(e);
+                                                }
+                                            }, new Surface(surface));
+                                        } catch (CameraAccessException e) {
+                                            e.printStackTrace();
+                                            mView.onError(e);
                                         }
 
-                                        @Override
-                                        public void onDisconnected(@NonNull CameraDevice camera) {
-                                            mCameraLock.release();
-                                            closeCamera();
+                                    }
 
-                                        }
+                                    @Override
+                                    public void onDisconnected(@NonNull CameraDevice camera) {
+                                        mCameraLock.release();
+                                        closeCamera();
 
-                                        @Override
-                                        public void onError(@NonNull CameraDevice camera, int error) {
-                                            mCameraLock.release();
-                                            closeCamera();
+                                    }
 
-                                        }
-                                    },
-                                    mBgThreadHandler);
-                        } catch (CameraAccessException e) {
-                            e.printStackTrace();
-                            mView.onError(e);
-                        }
-                    } catch (InterruptedException e) {
+                                    @Override
+                                    public void onError(@NonNull CameraDevice camera, int error) {
+                                        mCameraLock.release();
+                                        closeCamera();
+
+                                    }
+                                },
+                                mBgThreadHandler);
+                    } catch (CameraAccessException e) {
                         e.printStackTrace();
+                        mView.onError(e);
                     }
                 }
             });

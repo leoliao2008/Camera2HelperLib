@@ -41,11 +41,14 @@ public class CameraView extends TextureView {
     public void onWindowFocusChanged(boolean hasWindowFocus) {
         super.onWindowFocusChanged(hasWindowFocus);
         if (hasWindowFocus) {
+            showLog("hasWindowFocus",0);
             mPresenter.openCamera();
         } else {
+            showLog("lostWindowFocus",0);
             mPresenter.closeCamera();
         }
     }
+
 
     public void resetWidthHeightRatio(int optimalWidth, int optimalHeight) {
         mRatioWidth = optimalWidth;
