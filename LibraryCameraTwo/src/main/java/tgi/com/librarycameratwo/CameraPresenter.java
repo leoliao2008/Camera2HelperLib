@@ -113,7 +113,7 @@ public class CameraPresenter {
         } else {
             mView.resize(targetSize.getHeight(), targetSize.getWidth());
         }
-        mView.getSurfaceTexture().setDefaultBufferSize(targetSize.getWidth(), targetSize.getHeight());
+        mView.getSurfaceTexture().setDefaultBufferSize(targetSize.getHeight(), targetSize.getWidth());
 
         mView.postDelayed(new Runnable() {
             @Override
@@ -197,7 +197,6 @@ public class CameraPresenter {
 
                                 );
 
-                                surface.setDefaultBufferSize(mOptimalPreviewSize.getWidth(),mOptimalPreviewSize.getHeight() );
 
                                 configurePreviewTransformation(new Size(formerWidth, formerHeight), mOptimalPreviewSize);
 

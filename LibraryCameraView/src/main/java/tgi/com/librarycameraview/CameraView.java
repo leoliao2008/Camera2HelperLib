@@ -1,9 +1,11 @@
 package tgi.com.librarycameraview;
 
 import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Color;
 import android.util.AttributeSet;
-import android.view.MotionEvent;
 import android.view.TextureView;
+import android.view.View;
 import android.widget.Toast;
 
 /**
@@ -19,6 +21,7 @@ public class CameraView extends TextureView {
     private CameraViewPresenter mPresenter;
     private int mRatioWidth = 0;
     private int mRatioHeight = 0;
+    private SizeChangeCallback mSizeChangeCallback;
 
     public CameraView(Context context) {
         this(context, null);
@@ -30,6 +33,7 @@ public class CameraView extends TextureView {
 
     public CameraView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
+        setKeepScreenOn(true);
         mPresenter = new CameraViewPresenter(this);
     }
 
@@ -46,24 +50,32 @@ public class CameraView extends TextureView {
     public void resetWidthHeightRatio(int optimalWidth, int optimalHeight) {
         mRatioWidth = optimalWidth;
         mRatioHeight = optimalHeight;
+        //注意这里用invalidate是不行的
         requestLayout();
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int height = MeasureSpec.getSize(heightMeasureSpec);
-        if (0 == mRatioWidth || 0 == mRatioHeight) {
-            setMeasuredDimension(width, height);
-        } else {
-            if (width < height * mRatioWidth / mRatioHeight) {
-                setMeasuredDimension(width, width * mRatioHeight / mRatioWidth);
+        if (0 < mRatioWidth && 0 < mRatioHeight) {
+            if (width < height * 1.0f * mRatioWidth / mRatioHeight) {//把图片缩小到整个视图里，保证预览时看到完整图片。
+                height = (int) (width * 1.0f * mRatioHeight / mRatioWidth);
             } else {
-                setMeasuredDimension(height * mRatioWidth / mRatioHeight, height);
+                width = (int) (height * 1.0f * mRatioWidth / mRatioHeight);
             }
         }
+        setMeasuredDimension(width, height);
     }
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        if (mSizeChangeCallback != null) {
+            mSizeChangeCallback.onSizeChanged(w, h, oldw, oldh);
+        }
+    }
+
 
     public void onError(Exception e) {
         Toast.makeText(getContext().getApplicationContext(), e.getMessage(), Toast.LENGTH_SHORT).show();
@@ -71,5 +83,13 @@ public class CameraView extends TextureView {
 
     void showLog(String msg, int... logCodes) {
         LogUtil.showLog(getClass().getSimpleName(), msg, logCodes);
+    }
+
+    interface SizeChangeCallback {
+        void onSizeChanged(int w, int h, int oldw, int oldh);
+    }
+
+    void setSizeChangeCallback(SizeChangeCallback sizeChangeCallback) {
+        mSizeChangeCallback = sizeChangeCallback;
     }
 }

@@ -31,53 +31,42 @@ import java.util.Collections;
  */
 class CameraViewModel {
 
-    Size getOptimalSupportedSize(CameraManager manager, String cameraId, int textureWidth, int textureHeight, int deviceRotation) throws CameraAccessException {
+    Size getOptimalSupportedSize(CameraManager manager, String cameraId, int targetWidth, int targetHeight) throws CameraAccessException {
         CameraCharacteristics chars = manager.getCameraCharacteristics(cameraId);
         StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
         Size[] supportedSizes = map.getOutputSizes(ImageFormat.JPEG);
-        int compareWidth;
-        int compareHeight;
-        //卧倒的时候
-        if (deviceRotation == Surface.ROTATION_90 || deviceRotation == Surface.ROTATION_270) {
-            compareWidth = textureWidth;
-            compareHeight = textureHeight;
-        } else {
-            //直立的时候
-            compareWidth = textureHeight;
-            compareHeight = textureWidth;
-        }
-        float ratio = compareWidth * 1.0f / compareHeight;
+        float ratio = targetWidth * 1.0f / targetHeight;
         ArrayList<Size> fitsRatio = new ArrayList<>();
         ArrayList<Size> notFitsRatioAndSmaller = new ArrayList<>();
         for (Size size : supportedSizes) {
-            if (size.getWidth() == compareWidth && size.getHeight() == compareHeight) {
+            if (size.getWidth() == targetWidth && size.getHeight() == targetHeight) {
                 return size;
             } else {
+//                if (size.getWidth() < targetWidth * 0.75
+//                        || size.getWidth() > targetWidth * 1.25
+//                        || size.getHeight() < targetHeight * 0.75
+//                        || size.getHeight() > targetHeight * 1.25) {
+//                    continue;//把太大或太小的过滤掉
+//                }
+                if (size.getWidth()>targetWidth||size.getHeight()>targetHeight) {
+                    continue;//把大尺寸过滤掉
+                }
                 float tempRatio = size.getWidth() * 1.0f / size.getHeight();
                 if (Math.abs(tempRatio - ratio) <= 0.01) {//差不多就行了，不可能尾数都一样
-                    if (size.getWidth() >= compareWidth * 0.75
-                            && size.getWidth() <= compareWidth * 1.25
-                            && size.getHeight() >= compareHeight * 0.75
-                            && size.getHeight() <= compareHeight * 1.25) {
-                        fitsRatio.add(size);
-                    }
-                } else if (size.getWidth() <= compareWidth
-                        && size.getHeight() <= compareHeight) {
+                    fitsRatio.add(size);
+                } else {
                     notFitsRatioAndSmaller.add(size);
                 }
             }
         }
         if (fitsRatio.size() > 0) {
-            Size size = Collections.max(fitsRatio, new ComparatorBySize());
-            showLog("fitsRatio.size() > 0 width=" + size.getWidth() + " height=" + size.getHeight(), 0);
-            return size;
+            return Collections.max(fitsRatio, new ComparatorBySize());
         }
         if (notFitsRatioAndSmaller.size() > 0) {
-            Size size = Collections.min(notFitsRatioAndSmaller, new ComparatorByRatio(ratio));
-            showLog("notFitsRatioAndSmaller.size() > 0 width=" + size.getWidth() + " height=" + size.getHeight(), 0);
-            return size;
+            return Collections.max(notFitsRatioAndSmaller, new ComparatorBySize());
         }
-        return new Size(640, 480);
+        //凑合找最大的
+        return supportedSizes[0];
     }
 
     String getRearCameraId(CameraManager manager) throws CameraAccessException {
@@ -112,28 +101,35 @@ class CameraViewModel {
                 degree = 270;
                 break;
         }
-        showLog("screen rotation= " + degree, 0);
-        showLog("censor orientation = " + sensorOrientation, 0);
         return (sensorOrientation + degree + 360) % 360;
     }
 
-    Matrix genPreviewTransformMatrix(Size supportedOptimalSize, Size actualDestSize, int deviceRotation, int sensorOrientation) {
+    Matrix genPreviewTransformMatrix(Size supportedOptimalSize, Size actualDestSize, int deviceRotation) {
         Matrix matrix = new Matrix();
-        RectF beAppliedFrom = new RectF(0, 0, supportedOptimalSize.getHeight(), supportedOptimalSize.getWidth());
+        RectF beAppliedFrom;
+        //根据当前手机旋转方向判断摄像头的视图区域的形状
+        if (deviceRotation == Surface.ROTATION_90 || deviceRotation == Surface.ROTATION_270) {
+            beAppliedFrom = new RectF(0, 0, supportedOptimalSize.getWidth(), supportedOptimalSize.getHeight());
+        } else {
+            beAppliedFrom = new RectF(0, 0, supportedOptimalSize.getHeight(), supportedOptimalSize.getWidth());
+        }
+        //这里不用判断是横屏还是竖屏，在传入来时已经判断了。
         RectF beAppliedTo = new RectF(0, 0, actualDestSize.getWidth(), actualDestSize.getHeight());
 
-
+        //把摄像头内容移动到视图中心
         beAppliedFrom.offset(beAppliedTo.centerX() - beAppliedFrom.centerX(),
                 beAppliedTo.centerY() - beAppliedFrom.centerY());
 
+        //旋转摄像头图像的方向，这里是根据真机上的测试调整的，貌似当前设备旋转角度+补充旋转角度=360.
+        // 当前设备旋转角度要乘以90是因为要转化成真实角度，否则是1/2/3/0。360减去设备旋转角度，得到的是需要补充旋转的角度。
+        matrix.postRotate(360 - deviceRotation * 90, beAppliedTo.centerX(), beAppliedTo.centerY());
         if (deviceRotation == Surface.ROTATION_90 || deviceRotation == Surface.ROTATION_270) {
-            matrix.setRectToRect(beAppliedFrom, beAppliedTo, Matrix.ScaleToFit.FILL);
-            float scale = Math.min(
-                    actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getWidth(),
-                    actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getHeight());
-            matrix.postScale(scale,scale,beAppliedTo.centerX(), beAppliedTo.centerY());
+            //真机上测试时，发现横屏时的图像比例不正常（图像上下拉伸，同时左右两边到视图边缘留有大片空隙）。这里要根据比例调整，填充屏幕。
+            //为什么是此宽除以彼长，此长除以彼宽？因为刚刚图像旋转了90度。
+            float scaleX = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getHeight();
+            float scaleY = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getWidth();
+            matrix.postScale(scaleX, scaleY, beAppliedTo.centerX(), beAppliedTo.centerY());
         }
-        matrix.postRotate(360-deviceRotation*90, beAppliedTo.centerX(), beAppliedTo.centerY());
         return matrix;
     }
 

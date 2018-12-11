@@ -1,8 +1,9 @@
 package tgi.com.librarycameraview;
 
-import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
-import android.hardware.camera2.CaptureRequest; /**
+import android.hardware.camera2.CaptureRequest;
+
+/**
  * <p><b>Author:</b></p>
  * <i>leo</i>
  * <p><b>Date:</b></p>

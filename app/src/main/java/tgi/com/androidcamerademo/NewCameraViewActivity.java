@@ -7,7 +7,12 @@ import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
 
+import java.util.Random;
+
+import tgi.com.librarycameraview.CameraView;
+
 public class NewCameraViewActivity extends AppCompatActivity {
+    private CameraView mCameraView;
 
     public static void start(Context context) {
         Intent starter = new Intent(context, NewCameraViewActivity.class);
@@ -18,6 +23,7 @@ public class NewCameraViewActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_new_camera_view);
+        mCameraView=findViewById(R.id.activity_new_camera_view_camera_view);
     }
 
     @Override
@@ -33,5 +39,11 @@ public class NewCameraViewActivity extends AppCompatActivity {
 //                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
 //            );
 //        }
+    }
+
+    public void testAutoFit(View view) {
+        int w=new Random().nextInt(50);
+        int h=new Random().nextInt(50);
+        mCameraView.resetWidthHeightRatio(w,h);
     }
 }

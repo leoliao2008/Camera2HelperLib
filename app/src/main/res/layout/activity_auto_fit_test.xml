@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".AutoFitTestActivity">
+
+    <tgi.com.androidcamerademo.AutoFitView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:id="@+id/auto_fit_view" />
+
+    <RadioGroup
+        android:layout_gravity="bottom"
+        android:gravity="center"
+        android:id="@+id/radio_group"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@android:color/white">
+        <RadioButton
+            android:id="@+id/radio_btn_4v6"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="4/6"/>
+        <RadioButton
+            android:id="@+id/radio_btn_16v8"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="16/8"/>
+        <RadioButton
+            android:id="@+id/radio_btn_16v4"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="16/4"/>
+        <RadioButton
+            android:id="@+id/radio_btn_1v1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="1/1"/>
+        <RadioButton
+            android:id="@+id/radio_btn_2v6"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="2/6"/>
+    </RadioGroup>
+
+
+
+
+</FrameLayout>

@@ -38,6 +38,8 @@ class CameraViewPresenter {
     private Semaphore mCameraLock = new Semaphore(1);
     private CaptureRequest.Builder mRequestBuilder;
     private CameraCaptureSession mCaptureSession;
+    private int mTargetCameraWidth;
+    private int mTargetCameraHeight;
 
     CameraViewPresenter(CameraView view) {
         mView = view;
@@ -53,33 +55,32 @@ class CameraViewPresenter {
 
     void openCamera() {
         if (mView.isAvailable()) {
-            showLog("mView is Available",0);
             initAndOpenCamera(mView.getSurfaceTexture(), mView.getWidth(), mView.getHeight());
-        } else
-            showLog("mView is Not Available",0);
-        mView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-            @Override
-            public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-                initAndOpenCamera(surface, width, height);
-            }
+        } else {
+            mView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+                @Override
+                public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+                    initAndOpenCamera(surface, width, height);
+                }
 
-            @Override
-            public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+                @Override
+                public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
 
-            }
+                }
 
-            @Override
-            public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
-                showLog("onSurfaceTextureDestroyed",0);
-                closeCamera();
-                return true;
-            }
+                @Override
+                public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+                    closeCamera();
+                    return true;
+                }
 
-            @Override
-            public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+                @Override
+                public void onSurfaceTextureUpdated(SurfaceTexture surface) {
 
-            }
-        });
+                }
+            });
+        }
+
     }
 
     private void initBgHandler() {
@@ -91,88 +92,118 @@ class CameraViewPresenter {
     private void initAndOpenCamera(final SurfaceTexture surface, int width, int height) {
         try {
             initBgHandler();
-            int deviceRotation = mView.getDisplay().getRotation();
-            Size optimalSupportedSize = mModel.getOptimalSupportedSize(
-                    mCameraManager,
-                    mCameraId,
-                    width,
-                    height,
-                    deviceRotation);
-            int trueSensorOrientation = mModel.getTrueSensorOrientation(
-                    mCameraManager,
-                    mCameraId,
-                    deviceRotation);
-            Matrix matrix = mModel.genPreviewTransformMatrix(
-                    optimalSupportedSize,
-                    new Size(width, height),
-                    deviceRotation,
-                    trueSensorOrientation);
-            mView.getSurfaceTexture().setDefaultBufferSize(optimalSupportedSize.getWidth(),optimalSupportedSize.getHeight());
-//            mView.resetWidthHeightRatio(optimalSupportedSize.getWidth(),optimalSupportedSize.getHeight());
-            mView.setTransform(matrix);
 
-            try {
-                boolean isAcquire = mCameraLock.tryAcquire(2500, TimeUnit.MILLISECONDS);
-                if (!isAcquire) {
-                    return;
-                }
-                mModel.openCamera(mCameraManager, mCameraId, new CameraDevice.StateCallback() {
-                            @Override
-                            public void onOpened(@NonNull CameraDevice camera) {
-                                mCameraLock.release();
-                                mCameraDevice = camera;
-                                try {
-                                    mModel.createPreviewSession(camera, new CameraCaptureSessionStateCallback() {
-                                        @Override
-                                        public void onConfigured(CaptureRequest.Builder builder,
-                                                                 CameraCaptureSession session) {
-                                            mRequestBuilder = builder;
-                                            mCaptureSession = session;
-
-                                        }
-
-                                        @Override
-                                        public void onConfigureFailed(CameraCaptureSession session) {
-                                            showLog("onConfigureFailed",0);
-                                            closeCamera();
-
-                                        }
-
-                                        @Override
-                                        public void onError(Exception e) {
-                                            closeCamera();
-                                            mView.onError(e);
-                                        }
-                                    }, new Surface(surface));
-                                } catch (CameraAccessException e) {
-                                    e.printStackTrace();
-                                    mView.onError(e);
-                                }
-
-                            }
-
-                            @Override
-                            public void onDisconnected(@NonNull CameraDevice camera) {
-                                showLog("onDisconnected",0);
-                                mCameraLock.release();
-                                closeCamera();
-
-                            }
-
-                            @Override
-                            public void onError(@NonNull CameraDevice camera, int error) {
-                                showLog("onError",0);
-                                mCameraLock.release();
-                                closeCamera();
-
-                            }
-                        },
-                        mBgThreadHandler);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+            final int deviceRotation = mView.getDisplay().getRotation();
+            //判断当前视图是横屏还是竖屏，因为摄像头只有横屏，需要匹配最接近的一个相片尺寸。
+            final boolean isSwapWidthAndHeight = (deviceRotation == Surface.ROTATION_0 || deviceRotation == Surface.ROTATION_180);
+            if (isSwapWidthAndHeight) {
+                mTargetCameraWidth = width;
+                mTargetCameraHeight = height;
+            } else {
+                mTargetCameraWidth = height;
+                mTargetCameraHeight = width;
             }
+            final Size optimalSupportedSize = mModel.getOptimalSupportedSize(
+                    mCameraManager,
+                    mCameraId,
+                    mTargetCameraWidth,
+                    mTargetCameraHeight);
+            //以下所有操作都需要在回调中执行，保证预览视图已经调整完成，尺寸是我想要的尺寸。
+            mView.setSizeChangeCallback(new CameraView.SizeChangeCallback() {
+                @Override
+                public void onSizeChanged(int w, int h, int oldw, int oldh) {
+                    mView.setSizeChangeCallback(null);
+                    if (isSwapWidthAndHeight) {
+                        //避免图片拉伸
+                        mView.getSurfaceTexture().setDefaultBufferSize(h, w);
+                        //更新最新尺寸
+                        mTargetCameraWidth = h;
+                        mTargetCameraHeight = w;
+                    } else {
+                        //避免图片拉伸
+                        mView.getSurfaceTexture().setDefaultBufferSize(w, h);
+                        //更新最新尺寸
+                        mTargetCameraWidth = w;
+                        mTargetCameraHeight = h;
+                    }
+                    Matrix matrix = mModel.genPreviewTransformMatrix(
+                            optimalSupportedSize,
+                            new Size(mTargetCameraWidth, mTargetCameraHeight),
+                            deviceRotation);
+                    mView.setTransform(matrix);
 
+                    try {
+                        //这是保证打开摄像头的操作和关闭摄像头的操作的不会同时进行，造成冲突。
+                        boolean isAcquire = mCameraLock.tryAcquire(2500, TimeUnit.MILLISECONDS);
+                        if (!isAcquire) {
+                            return;
+                        }
+                        try {
+                            //预览尺寸和视图尺寸已经选好，调整好，不会拉伸变形后，正式打开摄像头。
+                            mModel.openCamera(mCameraManager, mCameraId, new CameraDevice.StateCallback() {
+                                        @Override
+                                        public void onOpened(@NonNull CameraDevice camera) {
+                                            mCameraLock.release();
+                                            mCameraDevice = camera;
+                                            try {
+                                                mModel.createPreviewSession(camera, new CameraCaptureSessionStateCallback() {
+                                                    @Override
+                                                    public void onConfigured(CaptureRequest.Builder builder,
+                                                                             CameraCaptureSession session) {
+                                                        mRequestBuilder = builder;
+                                                        mCaptureSession = session;
 
+                                                    }
+
+                                                    @Override
+                                                    public void onConfigureFailed(CameraCaptureSession session) {
+                                                        closeCamera();
+
+                                                    }
+
+                                                    @Override
+                                                    public void onError(Exception e) {
+                                                        closeCamera();
+                                                        mView.onError(e);
+                                                    }
+                                                }, new Surface(surface));
+                                            } catch (CameraAccessException e) {
+                                                e.printStackTrace();
+                                                mView.onError(e);
+                                            }
+
+                                        }
+
+                                        @Override
+                                        public void onDisconnected(@NonNull CameraDevice camera) {
+                                            mCameraLock.release();
+                                            closeCamera();
+
+                                        }
+
+                                        @Override
+                                        public void onError(@NonNull CameraDevice camera, int error) {
+                                            mCameraLock.release();
+                                            closeCamera();
+
+                                        }
+                                    },
+                                    mBgThreadHandler);
+                        } catch (CameraAccessException e) {
+                            e.printStackTrace();
+                            mView.onError(e);
+                        }
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+            //这里让预览图根据最优预览尺寸调整大小比例，因为不会立刻进行，后续获取最新尺寸的操作必须在上面回调中执行。
+            if (isSwapWidthAndHeight) {
+                mView.resetWidthHeightRatio(optimalSupportedSize.getHeight(), optimalSupportedSize.getWidth());
+            } else {
+                mView.resetWidthHeightRatio(optimalSupportedSize.getWidth(), optimalSupportedSize.getHeight());
+            }
         } catch (CameraAccessException e) {
             e.printStackTrace();
             mView.onError(e);
@@ -183,7 +214,6 @@ class CameraViewPresenter {
 
     void closeCamera() {
         if (mCameraLock.tryAcquire()) {
-            showLog("closeCamera",0);
             try {
                 if (mCameraDevice != null) {
                     mCameraDevice.close();
@@ -197,8 +227,11 @@ class CameraViewPresenter {
                     mCameraDevice.close();
                     mCameraDevice = null;
                 }
-                mBgThread.quitSafely();
-                mBgThread.join();
+                if (mBgThread != null && mBgThread.isAlive()) {
+                    mBgThread.quitSafely();
+                    mBgThread.join();
+                    mBgThread = null;
+                }
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -206,7 +239,7 @@ class CameraViewPresenter {
         }
     }
 
-    void showLog(String msg,int...logCodes) {
-        LogUtil.showLog(getClass().getSimpleName(), msg,logCodes);
+    void showLog(String msg, int... logCodes) {
+        LogUtil.showLog(getClass().getSimpleName(), msg, logCodes);
     }
 }

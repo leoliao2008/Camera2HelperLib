@@ -19,4 +19,8 @@ public class MainActivity extends AppCompatActivity {
     public void toLib2(View view) {
         NewCameraViewActivity.start(this);
     }
+
+    public void toAutoFitTest(View view) {
+        AutoFitTestActivity.start(this);
+    }
 }
