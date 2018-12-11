@@ -1,6 +1,7 @@
 package tgi.com.librarycameraview;
 
 import android.content.Context;
+import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
@@ -8,6 +9,8 @@ import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
+import android.media.Image;
+import android.media.ImageReader;
 import android.os.HandlerThread;
 import android.os.Process;
 import android.support.annotation.NonNull;
@@ -40,6 +43,7 @@ class CameraViewPresenter {
     private CameraCaptureSession mCaptureSession;
     private int mTargetCameraWidth;
     private int mTargetCameraHeight;
+    private ImageReader mTakeStillPicImageReader;
 
     CameraViewPresenter(CameraView view) {
         mView = view;
@@ -98,7 +102,7 @@ class CameraViewPresenter {
             e.printStackTrace();
         }
         if (!isAcquire) {
-            showLog("isAcquire = false, abort",0);
+            showLog("isAcquire = false, abort", 0);
             return;
         }
 
@@ -109,11 +113,11 @@ class CameraViewPresenter {
             //判断当前视图是横屏还是竖屏，因为摄像头只有横屏，需要匹配最接近的一个相片尺寸。
             final boolean isSwapWidthAndHeight = (deviceRotation == Surface.ROTATION_0 || deviceRotation == Surface.ROTATION_180);
             if (isSwapWidthAndHeight) {
-                mTargetCameraWidth = width;
-                mTargetCameraHeight = height;
-            } else {
                 mTargetCameraWidth = height;
                 mTargetCameraHeight = width;
+            } else {
+                mTargetCameraWidth = width;
+                mTargetCameraHeight = height;
             }
             final Size optimalSupportedSize = mModel.getOptimalSupportedSize(
                     mCameraManager,
@@ -121,10 +125,11 @@ class CameraViewPresenter {
                     mTargetCameraWidth,
                     mTargetCameraHeight);
             //以下所有操作都需要在回调中执行，保证预览视图已经调整完成，尺寸是我想要的尺寸。
-            mView.setSizeChangeCallback(new CameraView.SizeChangeCallback() {
+            mView.setSizeChangeListener(new CameraView.SizeChangeListener() {
                 @Override
-                public void onSizeChanged(int w, int h, int oldw, int oldh) {
-                    mView.setSizeChangeCallback(null);
+                public void onSizeChanged(int w, int h) {
+                    //每次调整尺寸后调用这个回调一次即可，防止重复打开摄像头。
+                    mView.setSizeChangeListener(null);
                     if (isSwapWidthAndHeight) {
                         //避免图片拉伸
                         mView.getSurfaceTexture().setDefaultBufferSize(h, w);
@@ -144,6 +149,20 @@ class CameraViewPresenter {
                             deviceRotation);
                     mView.setTransform(matrix);
 
+                    mTakeStillPicImageReader = ImageReader.newInstance(
+                            mTargetCameraWidth,//尺寸和视图尺寸一致，保证预览和照片图片是一致的。
+                            mTargetCameraHeight,
+                            ImageFormat.JPEG,
+                            2
+                    );
+                    mTakeStillPicImageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+                        @Override
+                        public void onImageAvailable(ImageReader reader) {
+                            Image image = reader.acquireLatestImage();
+                            image.close();
+                        }
+                    }, mBgThreadHandler);
+
                     try {
                         //预览尺寸和视图尺寸已经选好，调整好，不会拉伸变形后，正式打开摄像头。
                         mModel.openCamera(mCameraManager, mCameraId, new CameraDevice.StateCallback() {
@@ -152,27 +171,32 @@ class CameraViewPresenter {
                                         mCameraLock.release();
                                         mCameraDevice = camera;
                                         try {
-                                            mModel.createPreviewSession(camera, new CameraCaptureSessionStateCallback() {
-                                                @Override
-                                                public void onConfigured(CaptureRequest.Builder builder,
-                                                                         CameraCaptureSession session) {
-                                                    mRequestBuilder = builder;
-                                                    mCaptureSession = session;
+                                            mModel.createPreviewSession(
+                                                    camera,
+                                                    new CameraCaptureSessionStateCallback() {
+                                                        @Override
+                                                        public void onConfigured(CaptureRequest.Builder builder,
+                                                                                 CameraCaptureSession session) {
+                                                            mRequestBuilder = builder;
+                                                            mCaptureSession = session;
 
-                                                }
+                                                        }
 
-                                                @Override
-                                                public void onConfigureFailed(CameraCaptureSession session) {
-                                                    closeCamera();
+                                                        @Override
+                                                        public void onConfigureFailed(CameraCaptureSession session) {
+                                                            closeCamera();
 
-                                                }
+                                                        }
 
-                                                @Override
-                                                public void onError(Exception e) {
-                                                    closeCamera();
-                                                    mView.onError(e);
-                                                }
-                                            }, new Surface(surface));
+                                                        @Override
+                                                        public void onError(Exception e) {
+                                                            closeCamera();
+                                                            mView.onError(e);
+                                                        }
+                                                    },
+                                                    mBgThreadHandler,
+                                                    new Surface(surface),
+                                                    mTakeStillPicImageReader.getSurface());
                                         } catch (CameraAccessException e) {
                                             e.printStackTrace();
                                             mView.onError(e);
@@ -201,7 +225,7 @@ class CameraViewPresenter {
                     }
                 }
             });
-            //这里让预览图根据最优预览尺寸调整大小比例，因为不会立刻进行，后续获取最新尺寸的操作必须在上面回调中执行。
+            //这里让预览图根据最优预览尺寸调整大小比例，因为是异步操作，后续获取最新尺寸的操作必须在上面回调中执行。
             if (isSwapWidthAndHeight) {
                 mView.resetWidthHeightRatio(optimalSupportedSize.getHeight(), optimalSupportedSize.getWidth());
             } else {

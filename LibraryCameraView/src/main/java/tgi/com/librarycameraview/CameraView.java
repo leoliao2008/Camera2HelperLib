@@ -1,11 +1,8 @@
 package tgi.com.librarycameraview;
 
 import android.content.Context;
-import android.graphics.Canvas;
-import android.graphics.Color;
 import android.util.AttributeSet;
 import android.view.TextureView;
-import android.view.View;
 import android.widget.Toast;
 
 /**
@@ -21,7 +18,7 @@ public class CameraView extends TextureView {
     private CameraViewPresenter mPresenter;
     private int mRatioWidth = 0;
     private int mRatioHeight = 0;
-    private SizeChangeCallback mSizeChangeCallback;
+    private SizeChangeListener mSizeChangeListener;
 
     public CameraView(Context context) {
         this(context, null);
@@ -41,10 +38,8 @@ public class CameraView extends TextureView {
     public void onWindowFocusChanged(boolean hasWindowFocus) {
         super.onWindowFocusChanged(hasWindowFocus);
         if (hasWindowFocus) {
-            showLog("hasWindowFocus",0);
             mPresenter.openCamera();
         } else {
-            showLog("lostWindowFocus",0);
             mPresenter.closeCamera();
         }
     }
@@ -69,13 +64,9 @@ public class CameraView extends TextureView {
             }
         }
         setMeasuredDimension(width, height);
-    }
-
-    @Override
-    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        super.onSizeChanged(w, h, oldw, oldh);
-        if (mSizeChangeCallback != null) {
-            mSizeChangeCallback.onSizeChanged(w, h, oldw, oldh);
+        //每次requestLayout()时都触发这个回调，在回调中调整预览图尺寸
+        if (mSizeChangeListener != null) {
+            mSizeChangeListener.onSizeChanged(width, height);
         }
     }
 
@@ -88,11 +79,11 @@ public class CameraView extends TextureView {
         LogUtil.showLog(getClass().getSimpleName(), msg, logCodes);
     }
 
-    interface SizeChangeCallback {
-        void onSizeChanged(int w, int h, int oldw, int oldh);
+    interface SizeChangeListener {
+        void onSizeChanged(int w, int h);
     }
 
-    void setSizeChangeCallback(SizeChangeCallback sizeChangeCallback) {
-        mSizeChangeCallback = sizeChangeCallback;
+    void setSizeChangeListener(SizeChangeListener sizeChangeListener) {
+        mSizeChangeListener = sizeChangeListener;
     }
 }

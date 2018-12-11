@@ -13,6 +13,7 @@ import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.os.Handler;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.util.Size;
 import android.view.Surface;
 
@@ -113,19 +114,19 @@ class CameraViewModel {
         } else {
             beAppliedFrom = new RectF(0, 0, supportedOptimalSize.getHeight(), supportedOptimalSize.getWidth());
         }
-        //这里不用判断是横屏还是竖屏，在传入来时已经判断了。
+        //这里不用判断texture view是横屏还是竖屏，在传入来时已经判断了。
         RectF beAppliedTo = new RectF(0, 0, actualDestSize.getWidth(), actualDestSize.getHeight());
 
         //把摄像头内容移动到视图中心
         beAppliedFrom.offset(beAppliedTo.centerX() - beAppliedFrom.centerX(),
                 beAppliedTo.centerY() - beAppliedFrom.centerY());
 
-        //旋转摄像头图像的方向，这里是根据真机上的测试调整的，貌似当前设备旋转角度+补充旋转角度=360.
+        // 旋转摄像头图像的方向，这里是根据真机上的测试调整的，貌似当前设备旋转角度+补充旋转角度=360.
         // 当前设备旋转角度要乘以90是因为要转化成真实角度，否则是1/2/3/0。360减去设备旋转角度，得到的是需要补充旋转的角度。
         matrix.postRotate(360 - deviceRotation * 90, beAppliedTo.centerX(), beAppliedTo.centerY());
         if (deviceRotation == Surface.ROTATION_90 || deviceRotation == Surface.ROTATION_270) {
             //真机上测试时，发现横屏时的图像比例不正常（图像上下拉伸，同时左右两边到视图边缘留有大片空隙）。这里要根据比例调整，填充屏幕。
-            //为什么是此宽除以彼长，此长除以彼宽？因为刚刚图像旋转了90度。
+            //为什么是此宽除以彼长，此长除以彼宽？因为刚刚图像旋转了90度/270度。
             float scaleX = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getHeight();
             float scaleY = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getWidth();
             matrix.postScale(scaleX, scaleY, beAppliedTo.centerX(), beAppliedTo.centerY());
@@ -143,21 +144,29 @@ class CameraViewModel {
         );
     }
 
-    void createPreviewSession(final CameraDevice camera, final CameraCaptureSessionStateCallback callback, final Surface... outputSurfaces) throws CameraAccessException {
+    void createPreviewSession(final CameraDevice camera,
+                              final CameraCaptureSessionStateCallback callback,
+                              @Nullable final Handler handler,
+                              final Surface preViewSurface,
+                              final Surface stillPicSurface) throws CameraAccessException {
 
         camera.createCaptureSession(
-                Arrays.asList(outputSurfaces),
+                Arrays.asList(preViewSurface,stillPicSurface),
                 new CameraCaptureSession.StateCallback() {
                     @Override
                     public void onConfigured(@NonNull CameraCaptureSession session) {
                         try {
+                            //这里有坑，之前以为：target一次只能有一个，如果设置两个以上会非常卡顿。
+                            //但实际上：previewSurface输入的是textureSurface的surface,它会自动处理掉接受到的image，使其自动close()，循环使用。
+                            //然而其它的target接受到image后，
+                            //并不会自动处理掉image，不会调用image.close()，因此最初几个图像被接收后，后面的会卡住。
+                            //正确的做法是每个surface被addTarget()前，先设置onImageAvailableListener，在回调中手动处理image即可。
                             CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-                            for (Surface surface : outputSurfaces) {
-                                builder.addTarget(surface);
-                            }
+                            //这里不能把stillPicSurface加到target中去，因为stillPicSurface的图片格式是jpeg，不适用TEMPLATE_PREVIEW
+                            builder.addTarget(preViewSurface);
                             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
                             callback.onConfigured(builder, session);
-                            session.setRepeatingRequest(builder.build(), null, null);
+                            session.setRepeatingRequest(builder.build(), null, handler);
                         } catch (CameraAccessException e) {
                             e.printStackTrace();
                             callback.onError(e);
@@ -170,7 +179,7 @@ class CameraViewModel {
 
                     }
                 },
-                null
+                handler
         );
     }
 
