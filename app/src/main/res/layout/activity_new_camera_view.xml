@@ -8,19 +8,43 @@
     android:background="@android:color/holo_red_dark"
     android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
+
+
     <tgi.com.librarycameraview.CameraView
         android:id="@+id/activity_new_camera_view_camera_view"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"/>
 
+    <ImageView
+        android:id="@+id/activity_new_camera_view_iv_pic"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:visibility="gone"/>
+
     <Button
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="TestAutoFit"
+        android:text="Take Pic"
         android:textAllCaps="false"
-        android:onClick="testAutoFit"
+        android:onClick="takePic"
         android:layout_gravity="bottom"/>
+
+    <ToggleButton
+        android:id="@+id/activity_new_camera_view_tgbtn_pic"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textOn="ShowPic"
+        android:textOff="HidePic"
+        android:textAllCaps="false"/>
+
+    <Switch
+        android:id="@+id/activity_new_camera_view_switch_scale_type"
+        android:padding="10dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"/>
 
 
 </FrameLayout>
