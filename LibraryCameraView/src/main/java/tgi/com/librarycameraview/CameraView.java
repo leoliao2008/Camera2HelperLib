@@ -116,6 +116,8 @@ public class CameraView extends TextureView {
         }
         mScaleType = scaleType;
         mIsFirstTimeInitResize.set(true);
+        mPresenter.closeCamera();
+        mPresenter.openCamera();
     }
 
     public void takePic(TakeStillPicCallback callback) {

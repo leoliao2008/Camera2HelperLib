@@ -13,6 +13,7 @@ import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CaptureFailure;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
@@ -149,7 +150,6 @@ class CameraViewPresenter {
                         mTargetCameraWidth = w;
                         mTargetCameraHeight = h;
                     }
-//                    surface.setDefaultBufferSize(mTargetCameraWidth, mTargetCameraHeight);
                     surface.setDefaultBufferSize(optimalSupportedSize.getWidth(), optimalSupportedSize.getHeight());
 
                     Matrix matrix = mModel.genPreviewTransformMatrix(
@@ -276,8 +276,8 @@ class CameraViewPresenter {
                                 Matrix matrix = new Matrix();
                                 RectF rectFrom = new RectF(0, 0, src.getWidth(), src.getHeight());
                                 RectF rectTo = new RectF(0, 0, dest.getWidth(), dest.getHeight());
-                                //经真机上实测，需要旋转的角度（补充旋转角度）=450-当前手机旋转角度.
                                 matrix.postTranslate(rectTo.centerX() - rectFrom.centerX(), rectTo.centerY() - rectFrom.centerY());
+                                //经真机上实测，需要旋转的角度（补充旋转角度）=450-当前手机旋转角度.
                                 matrix.postRotate(450 - rotation, dest.getWidth() / 2, dest.getHeight() / 2);
                                 float scaleX;
                                 float scaleY;
@@ -288,8 +288,7 @@ class CameraViewPresenter {
                                     scaleX = dest.getWidth() * 1.0f / src.getHeight();
                                     scaleY = dest.getHeight() * 1.0f / src.getWidth();
                                 }
-                                matrix.postScale(scaleX, scaleY, rectTo.centerX(), rectTo.centerY());
-
+//                                matrix.postScale(scaleX, scaleY, rectTo.centerX(), rectTo.centerY());
                                 canvas.drawBitmap(src, matrix, new Paint());
                                 callback.onGetStillPic(dest);
                                 mTakeStillPicLock.release();
@@ -358,11 +357,13 @@ class CameraViewPresenter {
                                                 mCaptureSession.stopRepeating();
                                                 mCaptureSession.abortCaptures();
                                                 mRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
+                                                //乐视手机在这里可能会崩溃。
                                                 mCaptureSession.setRepeatingRequest(
                                                         mRequestBuilder.build(),
                                                         null,
                                                         mBgThreadHandler
                                                 );
+
                                             } catch (CameraAccessException e) {
                                                 e.printStackTrace();
                                             }
@@ -400,26 +401,22 @@ class CameraViewPresenter {
 
     void closeCamera() {
         if (mCameraLock.tryAcquire()) {
-            try {
-                if (mCameraDevice != null) {
-                    mCameraDevice.close();
-                    mCameraDevice = null;
-                }
-                if (mCaptureSession != null) {
-                    mCaptureSession.close();
-                    mCaptureSession = null;
-                }
-                if (mCameraDevice != null) {
-                    mCameraDevice.close();
-                    mCameraDevice = null;
-                }
-                if (mBgThread != null && mBgThread.isAlive()) {
-                    mBgThread.quitSafely();
+            if (mCaptureSession != null) {
+                mCaptureSession.close();
+                mCaptureSession = null;
+            }
+            if (mCameraDevice != null) {
+                mCameraDevice.close();
+                mCameraDevice = null;
+            }
+            if (mBgThread != null && mBgThread.isAlive()) {
+                mBgThread.quitSafely();
+                try {
                     mBgThread.join();
-                    mBgThread = null;
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+                mBgThread = null;
             }
             mCameraLock.release();
         }

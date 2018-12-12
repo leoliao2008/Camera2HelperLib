@@ -18,7 +18,7 @@ class LogUtil {
     private static final ArrayList<Integer> LOG_CODES = new ArrayList<>();
 
     static {
-        LOG_CODES.addAll(Arrays.asList(3));
+        LOG_CODES.addAll(Arrays.asList(0,1,3));
     }
 
     static void showLog(String tag, String msg, int... logCodes) {

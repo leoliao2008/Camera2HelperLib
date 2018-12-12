@@ -43,13 +43,13 @@ class CameraViewModel {
             if (size.getWidth() == targetWidth && size.getHeight() == targetHeight) {
                 return size;
             } else {
-//                if (size.getWidth() < targetWidth * 0.75
-//                        || size.getWidth() > targetWidth * 1.25
-//                        || size.getHeight() < targetHeight * 0.75
-//                        || size.getHeight() > targetHeight * 1.25) {
-//                    continue;//把太大或太小的过滤掉
-//                }
-                if (size.getWidth()>targetWidth||size.getHeight()>targetHeight) {
+                //                if (size.getWidth() < targetWidth * 0.75
+                //                        || size.getWidth() > targetWidth * 1.25
+                //                        || size.getHeight() < targetHeight * 0.75
+                //                        || size.getHeight() > targetHeight * 1.25) {
+                //                    continue;//把太大或太小的过滤掉
+                //                }
+                if (size.getWidth() > targetWidth || size.getHeight() > targetHeight) {
                     continue;//把大尺寸过滤掉
                 }
                 float tempRatio = size.getWidth() * 1.0f / size.getHeight();
@@ -124,13 +124,18 @@ class CameraViewModel {
         // 旋转摄像头图像的方向，这里是根据真机上的测试调整的，貌似当前设备旋转角度+补充旋转角度=360.
         // 当前设备旋转角度要乘以90是因为要转化成真实角度，否则是1/2/3/0。360减去设备旋转角度，得到的是需要补充旋转的角度。
         matrix.postRotate(360 - deviceRotation * 90, beAppliedTo.centerX(), beAppliedTo.centerY());
+        float scaleX;
+        float scaleY;
         if (deviceRotation == Surface.ROTATION_90 || deviceRotation == Surface.ROTATION_270) {
             //真机上测试时，发现横屏时的图像比例不正常（图像上下拉伸，同时左右两边到视图边缘留有大片空隙）。这里要根据比例调整，填充屏幕。
             //为什么是此宽除以彼长，此长除以彼宽？因为刚刚图像旋转了90度/270度。
-            float scaleX = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getHeight();
-            float scaleY = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getWidth();
-            matrix.postScale(scaleX, scaleY, beAppliedTo.centerX(), beAppliedTo.centerY());
+            scaleX = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getHeight();
+            scaleY = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getWidth();
+        } else {
+            scaleX =actualDestSize.getWidth()*1.0f/supportedOptimalSize.getWidth();
+            scaleY=actualDestSize.getHeight()*1.0f/supportedOptimalSize.getHeight();
         }
+        matrix.postScale(scaleX, scaleY, beAppliedTo.centerX(), beAppliedTo.centerY());
         return matrix;
     }
 
@@ -151,7 +156,7 @@ class CameraViewModel {
                               final Surface stillPicSurface) throws CameraAccessException {
 
         camera.createCaptureSession(
-                Arrays.asList(preViewSurface,stillPicSurface),//这里需要把用到的surface都加进来，否则surface今后获取不到图像。
+                Arrays.asList(preViewSurface, stillPicSurface),//这里需要把用到的surface都加进来，否则surface今后获取不到图像。
                 new CameraCaptureSession.StateCallback() {
                     @Override
                     public void onConfigured(@NonNull CameraCaptureSession session) {
