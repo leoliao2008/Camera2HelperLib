@@ -3,21 +3,16 @@ package tgi.com.androidcamerademo;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.media.Image;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.view.Display;
 import android.view.View;
-import android.view.Window;
 import android.widget.CompoundButton;
 import android.widget.ImageView;
 import android.widget.Switch;
 import android.widget.Toast;
 import android.widget.ToggleButton;
-
-import java.util.Random;
 
 import tgi.com.librarycameraview.CameraView;
 import tgi.com.librarycameraview.CameraViewScaleType;
@@ -68,7 +63,7 @@ public class NewCameraViewActivity extends AppCompatActivity {
             }
         });
 
-        mCameraView.registerTensorFlowImageSubsriber(new TensorFlowImageSubscriber(){
+        mCameraView.registerTensorFlowImageSubscriber(new TensorFlowImageSubscriber(){
             @Override
             public void onGetDynamicImage(final Bitmap image) {
                 super.onGetDynamicImage(image);

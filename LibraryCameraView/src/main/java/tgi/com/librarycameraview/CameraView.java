@@ -125,7 +125,7 @@ public class CameraView extends TextureView {
         mPresenter.takeStillPic(callback);
     }
 
-    public void registerTensorFlowImageSubsriber(TensorFlowImageSubscriber subscriber) {
+    public void registerTensorFlowImageSubscriber(TensorFlowImageSubscriber subscriber) {
         mPresenter.registerTensorFlowImageSubscriber(subscriber);
     }
 
