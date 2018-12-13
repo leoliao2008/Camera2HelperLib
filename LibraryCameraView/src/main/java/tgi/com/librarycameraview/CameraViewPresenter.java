@@ -191,7 +191,8 @@ class CameraViewPresenter {
                                     @Override
                                     public void run() {
                                         Image image = reader.acquireLatestImage();
-                                        //image在里面运行到一半的时候将被释放。如果放在后面再释放的时候，有可能因太耗时跳空指针。
+                                        // image将在getImageFromYUV_420_888Format运行到一半的时候在函数内部被释放。
+                                        // 因为运算太耗时，如果放在函数外面释放，有可能在释放的时候跳空指针。
                                         Bitmap bitmap = mModel.getImageFromYUV_420_888Format(image, tensorFlowOptimalSize);
                                         //这里需要再次判断一次非空，因为前面消耗了一定时间
                                         if (bitmap != null && mTensorFlowImageSubscriber != null) {
@@ -312,7 +313,7 @@ class CameraViewPresenter {
                                     }
                                 }
 
-                                Bitmap src = mModel.getBitmapByImage(image);
+                                Bitmap src = mModel.getBitmapFromJpegFormat(image);
                                 image.close();
 
                                 //计算当前手机的旋转角度：90,180,270,360（0）四种角度
@@ -382,8 +383,6 @@ class CameraViewPresenter {
                                                         builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
                                                         mCaptureSession.stopRepeating();
                                                         mCaptureSession.abortCaptures();
-                                                        //在诺基亚上测试时发现需要使用setRepeatingRequest而不是capture，否则成功拍照后就停止了，触发不了
-                                                        // onCaptureCompleted或者onCaptureProgressed，不会到第五步
                                                         mCaptureSession.capture(
                                                                 builder.build(),
                                                                 this,

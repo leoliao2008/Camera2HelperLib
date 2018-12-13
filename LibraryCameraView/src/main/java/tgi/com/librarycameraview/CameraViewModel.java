@@ -410,7 +410,7 @@ class CameraViewModel {
         LogUtil.showLog(getClass().getSimpleName(), msg, logCode);
     }
 
-    Bitmap getBitmapByImage(Image image) {
+    Bitmap getBitmapFromJpegFormat(Image image) {
         Image.Plane plane = image.getPlanes()[0];
         ByteBuffer buffer = plane.getBuffer();
         byte[] temp = new byte[buffer.remaining()];
