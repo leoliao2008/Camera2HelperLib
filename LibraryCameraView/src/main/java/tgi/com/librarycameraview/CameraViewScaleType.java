@@ -10,5 +10,5 @@ package tgi.com.librarycameraview;
  * <p><b>Description:</b></p>
  */
 public enum CameraViewScaleType {
-    CENTER_CROP,CENTER_INSIDE
+    CENTER_CROP, CENTER_INSIDE
 }

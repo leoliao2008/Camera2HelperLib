@@ -136,7 +136,7 @@ class CameraViewPresenter {
                     CONSTANTS.DESIRED_TENSOR_FLOW_PREVIEW_SIZE.getWidth(),
                     CONSTANTS.DESIRED_TENSOR_FLOW_PREVIEW_SIZE.getHeight());
 
-            mModel.initTensorFlowInput(tensorFlowOptimalSize,deviceRotation);
+            mModel.initTensorFlowInput(tensorFlowOptimalSize, deviceRotation);
 
 
             final Size supportedPreviewSize = mModel.getOptimalSupportedPreviewSize(

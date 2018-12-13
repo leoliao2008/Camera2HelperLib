@@ -12,7 +12,7 @@ import android.graphics.Bitmap;
  * <p><b>Description:</b></p>
  */
 public class TensorFlowImageSubscriber {
-    public void onGetDynamicImage(Bitmap image){
+    public void onGetDynamicImage(Bitmap image) {
 
     }
 }

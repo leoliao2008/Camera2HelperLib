@@ -131,19 +131,19 @@ class CameraViewModel {
         mCroppedBitmap = Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Bitmap.Config.ARGB_8888);
 
         //经真机实测得出的逻辑
-        int degreeToRote=0;
+        int degreeToRote = 0;
         switch (deviceOrientation) {
             case Surface.ROTATION_0:
-                degreeToRote=90;
+                degreeToRote = 90;
                 break;
             case Surface.ROTATION_90:
-                degreeToRote=0;
+                degreeToRote = 0;
                 break;
             case Surface.ROTATION_180:
-                degreeToRote=270;
+                degreeToRote = 270;
                 break;
             case Surface.ROTATION_270:
-                degreeToRote=180;
+                degreeToRote = 180;
                 break;
         }
 

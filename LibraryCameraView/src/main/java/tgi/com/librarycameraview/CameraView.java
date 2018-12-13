@@ -90,7 +90,7 @@ public class CameraView extends TextureView {
         super.onSizeChanged(w, h, oldw, oldh);
         //首次调整尺寸时从这里获取数据，虽然和onMeasure数值一样，但由于触发的时间点不一样，图像不会拉伸变形
         if (mSizeChangeListener != null) {
-            if(mIsFirstTimeResize.compareAndSet(true, false)){
+            if (mIsFirstTimeResize.compareAndSet(true, false)) {
                 mSizeChangeListener.onSizeChanged(w, h);
             }
         }
@@ -125,11 +125,11 @@ public class CameraView extends TextureView {
         mPresenter.takeStillPic(callback);
     }
 
-    public void registerTensorFlowImageSubsriber(TensorFlowImageSubscriber subscriber){
+    public void registerTensorFlowImageSubsriber(TensorFlowImageSubscriber subscriber) {
         mPresenter.registerTensorFlowImageSubscriber(subscriber);
     }
 
-    public void unRegisterTensorFlowImageSubscriber(){
+    public void unRegisterTensorFlowImageSubscriber() {
         mPresenter.unRegisterTensorFlowImageSubscriber();
     }
 }

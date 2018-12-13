@@ -12,7 +12,7 @@ import android.graphics.Bitmap;
  * <p><b>Description:</b></p>
  */
 public class TakeStillPicCallback {
-    public void onGetStillPic(Bitmap bitmap){
+    public void onGetStillPic(Bitmap bitmap) {
 
     }
 
