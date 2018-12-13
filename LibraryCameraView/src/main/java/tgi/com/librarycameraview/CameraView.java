@@ -21,8 +21,8 @@ public class CameraView extends TextureView {
     private int mRatioWidth = 0;
     private int mRatioHeight = 0;
     private SizeChangeListener mSizeChangeListener;
-    private AtomicBoolean mIsFirstTimeInitResize = new AtomicBoolean(true);
     private CameraViewScaleType mScaleType = CameraViewScaleType.CENTER_INSIDE;
+    private AtomicBoolean mIsFirstTimeResize = new AtomicBoolean(true);
 
     public CameraView(Context context) {
         this(context, null);
@@ -48,12 +48,12 @@ public class CameraView extends TextureView {
         }
     }
 
-
     void resetWidthHeightRatio(int optimalWidth, int optimalHeight) {
         mRatioWidth = optimalWidth;
         mRatioHeight = optimalHeight;
         //注意这里用invalidate是不行的
         requestLayout();
+        showLog("resetWidthHeightRatio", 0);
     }
 
     @Override
@@ -62,12 +62,14 @@ public class CameraView extends TextureView {
         int height = MeasureSpec.getSize(heightMeasureSpec);
         if (0 < mRatioWidth && 0 < mRatioHeight) {
             if (mScaleType == CameraViewScaleType.CENTER_CROP) {
+                //centerCrop: 不需要改变视图比例，改变视图尺寸，使其能刚好塞进图像中，显示图像中间部分。
                 if (width > height * 1.0f * mRatioWidth / mRatioHeight) {
                     height = (int) (width * 1.0f * mRatioHeight / mRatioWidth);
                 } else {
                     width = (int) (height * 1.0f * mRatioWidth / mRatioHeight);
                 }
             } else {
+                //centerInside: 改变视图比例，符合图像比例，把图像放进来，以完全显示图像。
                 if (width < height * 1.0f * mRatioWidth / mRatioHeight) {
                     height = (int) (width * 1.0f * mRatioHeight / mRatioWidth);
                 } else {
@@ -76,8 +78,9 @@ public class CameraView extends TextureView {
             }
         }
         setMeasuredDimension(width, height);
-        //经测试，除了第一次外，后续调节尺寸时，必须在这里执行回调，以保证不管尺寸是否改变，都会重新启动摄像头
-        if (!mIsFirstTimeInitResize.get() && mSizeChangeListener != null) {
+        //除了首次调整尺寸，后续的尺寸调整从这里获取数据，这样就算尺寸前后一致，也会触发回调的内容，重新打开摄像头。
+        //这是考虑到程序从后台返回到前台时，能自动重新打开摄像头。
+        if (!mIsFirstTimeResize.get() && mSizeChangeListener != null) {
             mSizeChangeListener.onSizeChanged(width, height);
         }
     }
@@ -85,10 +88,9 @@ public class CameraView extends TextureView {
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        //经测试，第一次调节尺寸时，必须在这里执行回调，虽然尺寸结果一样，但只有在这里执行回调里面的内容，图像才不会拉伸。
-        //原因未明。
+        //首次调整尺寸时从这里获取数据，虽然和onMeasure数值一样，但由于触发的时间点不一样，图像不会拉伸变形
         if (mSizeChangeListener != null) {
-            if (mIsFirstTimeInitResize.compareAndSet(true, false)) {
+            if(mIsFirstTimeResize.compareAndSet(true, false)){
                 mSizeChangeListener.onSizeChanged(w, h);
             }
         }
@@ -111,16 +113,23 @@ public class CameraView extends TextureView {
     }
 
     public void setScaleType(CameraViewScaleType scaleType) {
-        if(mScaleType==scaleType){
+        if (mScaleType == scaleType) {
             return;
         }
         mScaleType = scaleType;
-        mIsFirstTimeInitResize.set(true);
         mPresenter.closeCamera();
         mPresenter.openCamera();
     }
 
     public void takePic(TakeStillPicCallback callback) {
         mPresenter.takeStillPic(callback);
+    }
+
+    public void registerTensorFlowImageSubsriber(TensorFlowImageSubscriber subscriber){
+        mPresenter.registerTensorFlowImageSubscriber(subscriber);
+    }
+
+    public void unRegisterTensorFlowImageSubscriber(){
+        mPresenter.unRegisterTensorFlowImageSubscriber();
     }
 }

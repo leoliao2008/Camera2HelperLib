@@ -13,9 +13,7 @@ import android.hardware.camera2.CaptureRequest;
  * <p><b>Description:</b></p>
  */
 interface CameraCaptureSessionStateCallback {
-    void onConfigured(CaptureRequest.Builder builder, CameraCaptureSession session);
+    void onSessionEstablished(CaptureRequest.Builder builder, CameraCaptureSession session);
 
-    void onConfigureFailed(CameraCaptureSession session);
-
-    void onError(Exception e);
+    void onFailToEstablishSession();
 }

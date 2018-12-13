@@ -2,7 +2,6 @@ package tgi.com.librarycameraview;
 
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
@@ -13,7 +12,6 @@ import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
-import android.hardware.camera2.CaptureFailure;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
@@ -26,9 +24,7 @@ import android.util.Size;
 import android.view.Surface;
 import android.view.TextureView;
 
-import java.nio.ByteBuffer;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -49,18 +45,22 @@ class CameraViewPresenter {
     private String mCameraId;
     private CameraDevice mCameraDevice;
     private Semaphore mCameraLock = new Semaphore(1);
+    private Semaphore mTakeStillPicLock = new Semaphore(1);
+    private Semaphore mDynamicProcessingLock = new Semaphore(1);
     private CaptureRequest.Builder mRequestBuilder;
     private CameraCaptureSession mCaptureSession;
     private volatile int mTargetCameraWidth;
     private volatile int mTargetCameraHeight;
     private ImageReader mTakeStillPicImageReader;
-    private Semaphore mTakeStillPicLock = new Semaphore(1);
+    private ImageReader mTensorFlowImageReader;
     private static final int CAPTURE_STATE_WAITING_LOCK = 1;
     private static final int CAPTURE_STATE_FOCUSED = 2;
     private static final int CAPTURE_STATE_PIC_TAKEN = 3;
     private static final int CAPTURE_STATE_PREVIEWING = 4;
     private AtomicInteger mCurrentCaptureState = new AtomicInteger(CAPTURE_STATE_PREVIEWING);
     private Semaphore mProcessLock = new Semaphore(1);
+    private TensorFlowImageSubscriber mTensorFlowImageSubscriber;
+
 
     CameraViewPresenter(CameraView view) {
         mView = view;
@@ -113,7 +113,6 @@ class CameraViewPresenter {
     private void initAndOpenCamera(final SurfaceTexture surface, int width, int height) {
         //这是保证打开摄像头的操作和关闭摄像头的操作的不会同时进行，造成冲突。
         if (!mCameraLock.tryAcquire()) {
-            showLog("isAcquire = false, abort", 0);
             return;
         }
 
@@ -130,7 +129,17 @@ class CameraViewPresenter {
                 mTargetCameraWidth = width;
                 mTargetCameraHeight = height;
             }
-            final Size optimalSupportedSize = mModel.getOptimalSupportedSize(
+
+            //tensorFlow
+            final Size tensorFlowOptimalSize = mModel.getTensorFlowOptimalSize(
+                    mCameraManager.getCameraCharacteristics(mCameraId),
+                    CONSTANTS.DESIRED_TENSOR_FLOW_PREVIEW_SIZE.getWidth(),
+                    CONSTANTS.DESIRED_TENSOR_FLOW_PREVIEW_SIZE.getHeight());
+
+            mModel.initTensorFlowInput(tensorFlowOptimalSize,deviceRotation);
+
+
+            final Size supportedPreviewSize = mModel.getOptimalSupportedPreviewSize(
                     mCameraManager,
                     mCameraId,
                     mTargetCameraWidth,
@@ -150,20 +159,54 @@ class CameraViewPresenter {
                         mTargetCameraWidth = w;
                         mTargetCameraHeight = h;
                     }
-                    surface.setDefaultBufferSize(optimalSupportedSize.getWidth(), optimalSupportedSize.getHeight());
+                    //防止预览图变形
+                    surface.setDefaultBufferSize(supportedPreviewSize.getWidth(), supportedPreviewSize.getHeight());
 
+                    //防止预览图变形
                     Matrix matrix = mModel.genPreviewTransformMatrix(
-                            optimalSupportedSize,
+                            supportedPreviewSize,
                             new Size(mTargetCameraWidth, mTargetCameraHeight),
                             deviceRotation);
                     mView.setTransform(matrix);
 
                     mTakeStillPicImageReader = ImageReader.newInstance(
-                            optimalSupportedSize.getWidth(),
-                            optimalSupportedSize.getHeight(),
+                            supportedPreviewSize.getWidth(),
+                            supportedPreviewSize.getHeight(),
                             ImageFormat.JPEG,
                             2
                     );
+
+                    //tensorFlow
+                    mTensorFlowImageReader = ImageReader.newInstance(
+                            tensorFlowOptimalSize.getWidth(),
+                            tensorFlowOptimalSize.getHeight(),
+                            ImageFormat.YUV_420_888,
+                            2
+                    );
+                    mTensorFlowImageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+                        @Override
+                        public void onImageAvailable(final ImageReader reader) {
+                            if (mDynamicProcessingLock.tryAcquire() && mTensorFlowImageSubscriber != null) {
+                                new Thread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        Image image = reader.acquireLatestImage();
+                                        //image在里面运行到一半的时候将被释放。如果放在后面再释放的时候，有可能因太耗时跳空指针。
+                                        Bitmap bitmap = mModel.getImageFromYUV_420_888Format(image, tensorFlowOptimalSize);
+                                        //这里需要再次判断一次非空，因为前面消耗了一定时间
+                                        if (bitmap != null && mTensorFlowImageSubscriber != null) {
+                                            mTensorFlowImageSubscriber.onGetDynamicImage(bitmap);
+                                        }
+                                        mDynamicProcessingLock.release();
+                                    }
+                                }).start();
+                            } else {
+                                //手动处理image，否则接收不到新的图像。
+                                Image image = reader.acquireLatestImage();
+                                image.close();
+                            }
+                        }
+                    }, mBgThreadHandler);
 
                     try {
                         //保证预览尺寸已经调整好、不会拉伸变形后，正式打开摄像头。
@@ -177,28 +220,21 @@ class CameraViewPresenter {
                                                     camera,
                                                     new CameraCaptureSessionStateCallback() {
                                                         @Override
-                                                        public void onConfigured(CaptureRequest.Builder builder,
-                                                                                 CameraCaptureSession session) {
+                                                        public void onSessionEstablished(CaptureRequest.Builder builder,
+                                                                                         CameraCaptureSession session) {
                                                             mRequestBuilder = builder;
                                                             mCaptureSession = session;
-
                                                         }
 
                                                         @Override
-                                                        public void onConfigureFailed(CameraCaptureSession session) {
+                                                        public void onFailToEstablishSession() {
                                                             closeCamera();
-
-                                                        }
-
-                                                        @Override
-                                                        public void onError(Exception e) {
-                                                            closeCamera();
-                                                            mView.onError(e);
                                                         }
                                                     },
                                                     mBgThreadHandler,
                                                     new Surface(surface),
-                                                    mTakeStillPicImageReader.getSurface());
+                                                    mTakeStillPicImageReader.getSurface(),
+                                                    mTensorFlowImageReader.getSurface());
                                         } catch (CameraAccessException e) {
                                             e.printStackTrace();
                                             mView.onError(e);
@@ -209,8 +245,6 @@ class CameraViewPresenter {
                                     @Override
                                     public void onDisconnected(@NonNull CameraDevice camera) {
                                         mCameraLock.release();
-                                        closeCamera();
-
                                     }
 
                                     @Override
@@ -230,9 +264,9 @@ class CameraViewPresenter {
             });
             //这里让预览图根据最优预览尺寸调整大小比例，因为是异步操作，后续获取最新尺寸的操作必须在上面回调中执行。
             if (isSwapWidthAndHeight) {
-                mView.resetWidthHeightRatio(optimalSupportedSize.getHeight(), optimalSupportedSize.getWidth());
+                mView.resetWidthHeightRatio(supportedPreviewSize.getHeight(), supportedPreviewSize.getWidth());
             } else {
-                mView.resetWidthHeightRatio(optimalSupportedSize.getWidth(), optimalSupportedSize.getHeight());
+                mView.resetWidthHeightRatio(supportedPreviewSize.getWidth(), supportedPreviewSize.getHeight());
             }
         } catch (CameraAccessException e) {
             e.printStackTrace();
@@ -261,13 +295,29 @@ class CameraViewPresenter {
                                 showLog("第四步 拍照完成", 0);
                                 //在这里更新当前拍照状态，比onCaptureCompleted更可靠
                                 mCurrentCaptureState.compareAndSet(CAPTURE_STATE_FOCUSED, CAPTURE_STATE_PIC_TAKEN);
-                                Image.Plane plane = image.getPlanes()[0];
-                                ByteBuffer buffer = plane.getBuffer();
-                                byte[] temp = new byte[buffer.remaining()];
-                                buffer.get(temp);
-                                Bitmap src = BitmapFactory.decodeByteArray(temp, 0, temp.length);
+
+                                //第五步 拍照完成，返回预览
+                                if (mCurrentCaptureState.compareAndSet(CAPTURE_STATE_PIC_TAKEN, CAPTURE_STATE_PREVIEWING)) {
+                                    showLog("第五步 拍照完成，返回预览", 0);
+                                    try {
+                                        mRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
+                                        mCaptureSession.setRepeatingRequest(
+                                                mRequestBuilder.build(),
+                                                null,
+                                                mBgThreadHandler
+                                        );
+
+                                    } catch (CameraAccessException e) {
+                                        e.printStackTrace();
+                                    }
+                                }
+
+                                Bitmap src = mModel.getBitmapByImage(image);
+                                image.close();
+
                                 //计算当前手机的旋转角度：90,180,270,360（0）四种角度
                                 int rotation = mView.getDisplay().getRotation() * 90;
+                                //这里选择360而不是0是因为方便后面计算
                                 if (rotation == 0) {
                                     rotation = 360;
                                 }
@@ -281,6 +331,7 @@ class CameraViewPresenter {
                                 matrix.postRotate(450 - rotation, dest.getWidth() / 2, dest.getHeight() / 2);
                                 float scaleX;
                                 float scaleY;
+                                //根据真机测试得来的逻辑
                                 if (rotation == 90 || rotation == 270) {
                                     scaleX = dest.getWidth() * 1.0f / src.getWidth();
                                     scaleY = dest.getHeight() * 1.0f / src.getHeight();
@@ -288,14 +339,14 @@ class CameraViewPresenter {
                                     scaleX = dest.getWidth() * 1.0f / src.getHeight();
                                     scaleY = dest.getHeight() * 1.0f / src.getWidth();
                                 }
-//                                matrix.postScale(scaleX, scaleY, rectTo.centerX(), rectTo.centerY());
+                                matrix.postScale(scaleX, scaleY, rectTo.centerX(), rectTo.centerY());
                                 canvas.drawBitmap(src, matrix, new Paint());
+                                //在横屏时，最终照片视角稍微比预览的要大，待解决。
                                 callback.onGetStillPic(dest);
-                                mTakeStillPicLock.release();
-                                image.close();
                             } else {
                                 callback.onFailToGetPic();
                             }
+                            mTakeStillPicLock.release();
                         }
                     }
                 },
@@ -311,68 +362,45 @@ class CameraViewPresenter {
                         new CameraCaptureSession.CaptureCallback() {
                             private void process(CameraCaptureSession session, CaptureRequest request, CaptureResult result) {
                                 //上锁，保证处理完一个事件再处理另一个事件，否则跳过
-                                if (!mProcessLock.tryAcquire()) {
-                                    return;
-                                }
-                                switch (mCurrentCaptureState.get()) {
-                                    case CAPTURE_STATE_PREVIEWING:
-                                        break;
-                                    case CAPTURE_STATE_WAITING_LOCK:
-                                        //第二步 检查是否聚焦成功：
-                                        showLog("第二步 检查是否聚焦成功", 0);
-                                        Integer afState = result.get(CaptureResult.CONTROL_AF_STATE);
-                                        if (afState == null
-                                                || afState == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED
-                                                || afState == CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED) {
-                                            //第三步 如果成功，开始静态拍照
-                                            showLog("第三步 成功，开始静态拍照", 0);
-                                            if (mCurrentCaptureState.compareAndSet(CAPTURE_STATE_WAITING_LOCK, CAPTURE_STATE_FOCUSED)) {
-                                                try {
-                                                    CaptureRequest.Builder builder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-                                                    builder.addTarget(mTakeStillPicImageReader.getSurface());
-                                                    builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-                                                    mCaptureSession.stopRepeating();
-                                                    mCaptureSession.abortCaptures();
-                                                    //在诺基亚上测试时发现需要使用setRepeatingRequest而不是request，否则成功拍照后就停止了，触发不了
-                                                    // onCaptureCompleted或者onCaptureProgressed，不会到第五步
-                                                    mCaptureSession.setRepeatingRequest(
-                                                            builder.build(),
-                                                            this,
-                                                            mBgThreadHandler
-                                                    );
-                                                } catch (CameraAccessException e) {
-                                                    e.printStackTrace();
-                                                    callback.onFailToGetPic();
+                                if (mProcessLock.tryAcquire()) {
+                                    switch (mCurrentCaptureState.get()) {
+                                        case CAPTURE_STATE_PREVIEWING:
+                                            break;
+                                        case CAPTURE_STATE_WAITING_LOCK:
+                                            //第二步 检查是否聚焦成功：
+                                            showLog("第二步 检查是否聚焦成功", 0);
+                                            Integer afState = result.get(CaptureResult.CONTROL_AF_STATE);
+                                            if (afState == null
+                                                    || afState == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED
+                                                    || afState == CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED) {
+                                                //第三步 如果成功，开始静态拍照
+                                                showLog("第三步 成功，开始静态拍照", 0);
+                                                if (mCurrentCaptureState.compareAndSet(CAPTURE_STATE_WAITING_LOCK, CAPTURE_STATE_FOCUSED)) {
+                                                    try {
+                                                        CaptureRequest.Builder builder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+                                                        builder.addTarget(mTakeStillPicImageReader.getSurface());
+                                                        builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+                                                        mCaptureSession.stopRepeating();
+                                                        mCaptureSession.abortCaptures();
+                                                        //在诺基亚上测试时发现需要使用setRepeatingRequest而不是capture，否则成功拍照后就停止了，触发不了
+                                                        // onCaptureCompleted或者onCaptureProgressed，不会到第五步
+                                                        mCaptureSession.capture(
+                                                                builder.build(),
+                                                                this,
+                                                                mBgThreadHandler
+                                                        );
+                                                    } catch (CameraAccessException e) {
+                                                        e.printStackTrace();
+                                                        callback.onFailToGetPic();
+                                                    }
                                                 }
+                                            } else {
+                                                showLog("第三步 失败，重来", 0);
                                             }
-                                        } else {
-                                            showLog("第三步 失败，重来", 0);
-                                        }
-                                        break;
-                                    case CAPTURE_STATE_PIC_TAKEN:
-                                        //第五步 拍照完成，返回预览
-                                        showLog("第五步 拍照完成，返回预览", 0);
-                                        if (mCurrentCaptureState.compareAndSet(CAPTURE_STATE_PIC_TAKEN, CAPTURE_STATE_PREVIEWING)) {
-                                            try {
-                                                mCaptureSession.stopRepeating();
-                                                mCaptureSession.abortCaptures();
-                                                mRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_CANCEL);
-                                                //乐视手机在这里可能会崩溃。
-                                                mCaptureSession.setRepeatingRequest(
-                                                        mRequestBuilder.build(),
-                                                        null,
-                                                        mBgThreadHandler
-                                                );
-
-                                            } catch (CameraAccessException e) {
-                                                e.printStackTrace();
-                                            }
-                                        }
-                                        break;
-
+                                            break;
+                                    }
+                                    mProcessLock.release();
                                 }
-                                //别忘记开锁
-                                mProcessLock.release();
                             }
 
                             @Override
@@ -399,15 +427,26 @@ class CameraViewPresenter {
 
     }
 
+    void registerTensorFlowImageSubscriber(TensorFlowImageSubscriber listener) {
+        mTensorFlowImageSubscriber = listener;
+    }
+
+    void unRegisterTensorFlowImageSubscriber() {
+        mTensorFlowImageSubscriber = null;
+    }
+
     void closeCamera() {
         if (mCameraLock.tryAcquire()) {
             if (mCaptureSession != null) {
-                mCaptureSession.close();
-                mCaptureSession = null;
-            }
-            if (mCameraDevice != null) {
-                mCameraDevice.close();
-                mCameraDevice = null;
+                try {
+                    mCaptureSession.stopRepeating();
+                    mCaptureSession.abortCaptures();
+                    mCaptureSession.close();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                } finally {
+                    mCaptureSession = null;
+                }
             }
             if (mBgThread != null && mBgThread.isAlive()) {
                 mBgThread.quitSafely();
@@ -417,6 +456,11 @@ class CameraViewPresenter {
                     e.printStackTrace();
                 }
                 mBgThread = null;
+            }
+            //摄像头要最后关掉，否则前面几个会报错。
+            if (mCameraDevice != null) {
+                mCameraDevice.close();
+                mCameraDevice = null;
             }
             mCameraLock.release();
         }

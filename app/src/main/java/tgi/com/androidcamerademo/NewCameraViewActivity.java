@@ -6,6 +6,9 @@ import android.graphics.Bitmap;
 import android.media.Image;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.DisplayMetrics;
+import android.util.Log;
+import android.view.Display;
 import android.view.View;
 import android.view.Window;
 import android.widget.CompoundButton;
@@ -19,12 +22,14 @@ import java.util.Random;
 import tgi.com.librarycameraview.CameraView;
 import tgi.com.librarycameraview.CameraViewScaleType;
 import tgi.com.librarycameraview.TakeStillPicCallback;
+import tgi.com.librarycameraview.TensorFlowImageSubscriber;
 
 public class NewCameraViewActivity extends AppCompatActivity {
     private CameraView mCameraView;
     private ImageView mPic;
     private ToggleButton mTgBtnPic;
     private Switch mSwitch;
+    private ImageView mIvTensorFlowImage;
 
     public static void start(Context context) {
         Intent starter = new Intent(context, NewCameraViewActivity.class);
@@ -39,6 +44,7 @@ public class NewCameraViewActivity extends AppCompatActivity {
         mPic=findViewById(R.id.activity_new_camera_view_iv_pic);
         mTgBtnPic=findViewById(R.id.activity_new_camera_view_tgbtn_pic);
         mSwitch=findViewById(R.id.activity_new_camera_view_switch_scale_type);
+        mIvTensorFlowImage=findViewById(R.id.activity_new_camera_view_iv_tensor_flow_image);
 
         mTgBtnPic.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
@@ -61,6 +67,19 @@ public class NewCameraViewActivity extends AppCompatActivity {
                 }
             }
         });
+
+        mCameraView.registerTensorFlowImageSubsriber(new TensorFlowImageSubscriber(){
+            @Override
+            public void onGetDynamicImage(final Bitmap image) {
+                super.onGetDynamicImage(image);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        mIvTensorFlowImage.setImageBitmap(image);
+                    }
+                });
+            }
+        });
     }
 
 
@@ -69,6 +88,9 @@ public class NewCameraViewActivity extends AppCompatActivity {
             @Override
             public void onGetStillPic(final Bitmap bitmap) {
                 super.onGetStillPic(bitmap);
+                Display display = getWindowManager().getDefaultDisplay();
+                DisplayMetrics metrics=new DisplayMetrics();
+                display.getMetrics(metrics);
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
@@ -90,5 +112,11 @@ public class NewCameraViewActivity extends AppCompatActivity {
                 });
             }
         });
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        mCameraView.unRegisterTensorFlowImageSubscriber();
     }
 }
