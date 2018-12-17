@@ -436,6 +436,7 @@ class CameraViewPresenter {
 
     void closeCamera() {
         if (mCameraLock.tryAcquire()) {
+
             if (mCaptureSession != null) {
                 try {
                     mCaptureSession.stopRepeating();
@@ -460,6 +461,17 @@ class CameraViewPresenter {
             if (mCameraDevice != null) {
                 mCameraDevice.close();
                 mCameraDevice = null;
+            }
+
+            //未知会有什么不良影响。
+            if(mTakeStillPicImageReader!=null){
+                mTakeStillPicImageReader.close();
+                mTakeStillPicImageReader=null;
+            }
+
+            if(mTensorFlowImageReader!=null){
+                mTensorFlowImageReader.close();
+                mTensorFlowImageReader=null;
             }
             mCameraLock.release();
         }
