@@ -407,7 +407,7 @@ class CameraViewModel {
     }
 
     void showLog(String msg, int... logCode) {
-        LogUtil.showLog(getClass().getSimpleName(), msg, logCode);
+        LogUtil.showLog(msg, logCode);
     }
 
     Bitmap getBitmapFromJpegFormat(Image image) {

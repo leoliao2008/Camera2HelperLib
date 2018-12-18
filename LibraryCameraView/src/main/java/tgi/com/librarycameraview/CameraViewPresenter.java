@@ -375,7 +375,7 @@ class CameraViewPresenter {
                                                     || afState == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED
                                                     || afState == CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED) {
                                                 //第三步 如果成功，开始静态拍照
-                                                showLog("第三步 成功，开始静态拍照", 0);
+                                                showLog("第三步 聚焦成功，开始静态拍照", 0);
                                                 if (mCurrentCaptureState.compareAndSet(CAPTURE_STATE_WAITING_LOCK, CAPTURE_STATE_FOCUSED)) {
                                                     try {
                                                         CaptureRequest.Builder builder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
@@ -394,7 +394,7 @@ class CameraViewPresenter {
                                                     }
                                                 }
                                             } else {
-                                                showLog("第三步 失败，重来", 0);
+                                                showLog("第三步 聚焦失败，返回第二步", 0);
                                             }
                                             break;
                                     }
@@ -464,20 +464,20 @@ class CameraViewPresenter {
             }
 
             //未知会有什么不良影响。
-            if(mTakeStillPicImageReader!=null){
+            if (mTakeStillPicImageReader != null) {
                 mTakeStillPicImageReader.close();
-                mTakeStillPicImageReader=null;
+                mTakeStillPicImageReader = null;
             }
 
-            if(mTensorFlowImageReader!=null){
+            if (mTensorFlowImageReader != null) {
                 mTensorFlowImageReader.close();
-                mTensorFlowImageReader=null;
+                mTensorFlowImageReader = null;
             }
             mCameraLock.release();
         }
     }
 
     void showLog(String msg, int... logCodes) {
-        LogUtil.showLog(getClass().getSimpleName(), msg, logCodes);
+        LogUtil.showLog(msg, logCodes);
     }
 }

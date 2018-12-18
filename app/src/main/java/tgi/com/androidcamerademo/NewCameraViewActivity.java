@@ -41,6 +41,8 @@ public class NewCameraViewActivity extends AppCompatActivity {
         mSwitch=findViewById(R.id.activity_new_camera_view_switch_scale_type);
         mIvTensorFlowImage=findViewById(R.id.activity_new_camera_view_iv_tensor_flow_image);
 
+
+
         mTgBtnPic.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
@@ -63,6 +65,7 @@ public class NewCameraViewActivity extends AppCompatActivity {
             }
         });
 
+        mCameraView.enableDebug(true);
         mCameraView.registerTensorFlowImageSubscriber(new TensorFlowImageSubscriber(){
             @Override
             public void onGetDynamicImage(final Bitmap image) {

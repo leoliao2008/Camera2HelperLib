@@ -15,18 +15,27 @@ import java.util.Arrays;
  * <p><b>Description:</b></p>
  */
 class LogUtil {
+    private static boolean DEBUG = false;
+
     private static final ArrayList<Integer> LOG_CODES = new ArrayList<>();
 
     static {
         LOG_CODES.addAll(Arrays.asList(0, 1, 3));
     }
 
-    static void showLog(String tag, String msg, int... logCodes) {
+    static void showLog(String msg, int... logCodes) {
+        if (!DEBUG) {
+            return;
+        }
         for (int i : logCodes) {
             if (LOG_CODES.contains(i)) {
-                Log.e("Error By Leo: " + tag, msg);
+                Log.e("CameraView Debug: ", msg);
                 break;
             }
         }
+    }
+
+    static void setDebugMode(boolean isDebugMode) {
+        DEBUG = isDebugMode;
     }
 }

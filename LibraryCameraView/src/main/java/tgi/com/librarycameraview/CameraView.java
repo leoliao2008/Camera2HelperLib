@@ -53,7 +53,6 @@ public class CameraView extends TextureView {
         mRatioHeight = optimalHeight;
         //注意这里用invalidate是不行的
         requestLayout();
-        showLog("resetWidthHeightRatio", 0);
     }
 
     @Override
@@ -101,7 +100,7 @@ public class CameraView extends TextureView {
     }
 
     void showLog(String msg, int... logCodes) {
-        LogUtil.showLog(getClass().getSimpleName(), msg, logCodes);
+        LogUtil.showLog(msg, logCodes);
     }
 
     interface SizeChangeListener {
@@ -131,5 +130,9 @@ public class CameraView extends TextureView {
 
     public void unRegisterTensorFlowImageSubscriber() {
         mPresenter.unRegisterTensorFlowImageSubscriber();
+    }
+
+    public void enableDebug(boolean isDebugMode) {
+        LogUtil.setDebugMode(isDebugMode);
     }
 }
