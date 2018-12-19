@@ -117,4 +117,8 @@ public class NewCameraViewActivity extends AppCompatActivity {
         super.onDestroy();
         mCameraView.unRegisterTensorFlowImageSubscriber();
     }
+
+    public void toNext(View view) {
+        NextActivity.start(this);
+    }
 }

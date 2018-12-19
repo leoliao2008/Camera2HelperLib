@@ -21,7 +21,7 @@ public class CameraView extends TextureView {
     private int mRatioWidth = 0;
     private int mRatioHeight = 0;
     private SizeChangeListener mSizeChangeListener;
-    private CameraViewScaleType mScaleType = CameraViewScaleType.CENTER_INSIDE;
+    private CameraViewScaleType mScaleType = CameraViewScaleType.CENTER_CROP;
     private AtomicBoolean mIsFirstTimeResize = new AtomicBoolean(true);
 
     public CameraView(Context context) {
@@ -37,6 +37,20 @@ public class CameraView extends TextureView {
         setKeepScreenOn(true);
         mPresenter = new CameraViewPresenter(this);
     }
+
+//    @Override
+//    protected void onAttachedToWindow() {
+//        super.onAttachedToWindow();
+//        showLog("onAttachedToWindow");
+//        mPresenter.openCamera();
+//    }
+//
+//    @Override
+//    protected void onDetachedFromWindow() {
+//        super.onDetachedFromWindow();
+//        showLog("onDetachedFromWindow");
+//        mPresenter.closeCamera();
+//    }
 
     @Override
     public void onWindowFocusChanged(boolean hasWindowFocus) {
@@ -79,17 +93,24 @@ public class CameraView extends TextureView {
         setMeasuredDimension(width, height);
         //除了首次调整尺寸，后续的尺寸调整从这里获取数据，这样就算尺寸前后一致，也会触发回调的内容，重新打开摄像头。
         //这是考虑到程序从后台返回到前台时，能自动重新打开摄像头。
+        showLog("onMeasure w="+width+" height="+height);
         if (!mIsFirstTimeResize.get() && mSizeChangeListener != null) {
+            showLog("adopt size from onMeasure w="+width+" height="+height);
             mSizeChangeListener.onSizeChanged(width, height);
         }
+//        if(mSizeChangeListener!=null){
+//            mSizeChangeListener.onSizeChanged(width,height);
+//        }
     }
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         //首次调整尺寸时从这里获取数据，虽然和onMeasure数值一样，但由于触发的时间点不一样，图像不会拉伸变形
+        showLog("onSizeChanged w="+w+" h="+h);
         if (mSizeChangeListener != null) {
             if (mIsFirstTimeResize.compareAndSet(true, false)) {
+                showLog("adopt size from onSizeChanged w="+w+" h="+h);
                 mSizeChangeListener.onSizeChanged(w, h);
             }
         }

@@ -346,7 +346,6 @@ class CameraViewModel {
             scaleX = actualDestSize.getWidth() * 1.0f / supportedOptimalSize.getHeight();
             scaleY = actualDestSize.getHeight() * 1.0f / supportedOptimalSize.getWidth();
             matrix.postScale(scaleX, scaleY, beAppliedTo.centerX(), beAppliedTo.centerY());
-            showLog("preview matrix: scale x=" + scaleX + " scale y=" + scaleY, 0);
         }
 
         return matrix;
@@ -373,7 +372,6 @@ class CameraViewModel {
                 Arrays.asList(preViewSurface, stillPicSurface, tensorFlowSurface),//这里需要把用到的surface都加进来，否则surface今后获取不到图像。
                 new CameraCaptureSession.StateCallback() {
                     AtomicBoolean isFirstOnConfigured = new AtomicBoolean(true);
-
                     @Override
                     public void onConfigured(@NonNull CameraCaptureSession session) {
                         try {

@@ -24,6 +24,7 @@ import android.util.Size;
 import android.view.Surface;
 import android.view.TextureView;
 
+import java.util.SortedMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -113,6 +114,7 @@ class CameraViewPresenter {
     private void initAndOpenCamera(final SurfaceTexture surface, int width, int height) {
         //这是保证打开摄像头的操作和关闭摄像头的操作的不会同时进行，造成冲突。
         if (!mCameraLock.tryAcquire()) {
+            showLog("mCameraLock.tryAcquire()=false,abort");
             return;
         }
 
@@ -186,25 +188,24 @@ class CameraViewPresenter {
                     mTensorFlowImageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
                         @Override
                         public void onImageAvailable(final ImageReader reader) {
-                            if (mDynamicProcessingLock.tryAcquire() && mTensorFlowImageSubscriber != null) {
-                                new Thread(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        Image image = reader.acquireLatestImage();
-                                        // image将在getImageFromYUV_420_888Format运行到一半的时候在函数内部被释放。
-                                        // 因为运算太耗时，如果放在函数外面释放，有可能在释放的时候跳空指针。
-                                        Bitmap bitmap = mModel.getImageFromYUV_420_888Format(image, tensorFlowOptimalSize);
-                                        //这里需要再次判断一次非空，因为前面消耗了一定时间
-                                        if (bitmap != null && mTensorFlowImageSubscriber != null) {
-                                            mTensorFlowImageSubscriber.onGetDynamicImage(bitmap);
-                                        }
-                                        mDynamicProcessingLock.release();
+                            if (mTensorFlowImageSubscriber != null) {
+                                if(mDynamicProcessingLock.tryAcquire()){
+                                    Image image = reader.acquireLatestImage();
+                                    // image将在getImageFromYUV_420_888Format运行到一半的时候在函数内部被释放。
+                                    // 因为运算太耗时，如果放在函数外面释放，有可能在释放的时候跳空指针。
+                                    Bitmap bitmap = mModel.getImageFromYUV_420_888Format(image, tensorFlowOptimalSize);
+                                    //这里需要再次判断一次非空，因为前面消耗了一定时间
+                                    if (bitmap != null && mTensorFlowImageSubscriber != null) {
+                                        mTensorFlowImageSubscriber.onGetDynamicImage(bitmap);
                                     }
-                                }).start();
+                                    mDynamicProcessingLock.release();
+                                }
                             } else {
                                 //手动处理image，否则接收不到新的图像。
                                 Image image = reader.acquireLatestImage();
-                                image.close();
+                                if(image!=null){
+                                    image.close();
+                                }
                             }
                         }
                     }, mBgThreadHandler);
@@ -216,6 +217,7 @@ class CameraViewPresenter {
                                     public void onOpened(@NonNull CameraDevice camera) {
                                         mCameraLock.release();
                                         mCameraDevice = camera;
+                                        showLog("camera open!");
                                         try {
                                             mModel.createPreviewSession(
                                                     camera,
@@ -463,16 +465,16 @@ class CameraViewPresenter {
                 mCameraDevice = null;
             }
 
-            //未知会有什么不良影响。
-            if (mTakeStillPicImageReader != null) {
-                mTakeStillPicImageReader.close();
-                mTakeStillPicImageReader = null;
-            }
-
-            if (mTensorFlowImageReader != null) {
-                mTensorFlowImageReader.close();
-                mTensorFlowImageReader = null;
-            }
+//            //未知会有什么不良影响。
+//            if (mTakeStillPicImageReader != null) {
+//                mTakeStillPicImageReader.close();
+//                mTakeStillPicImageReader = null;
+//            }
+//
+//            if (mTensorFlowImageReader != null) {
+//                mTensorFlowImageReader.close();
+//                mTensorFlowImageReader = null;
+//            }
             mCameraLock.release();
         }
     }
