@@ -27,9 +27,6 @@ class LogUtil {
         if (!DEBUG) {
             return;
         }
-//        if(logCodes.length<1){
-//            logCodes=new int[]{1};
-//        }
         for (int i : logCodes) {
             if (LOG_CODES.contains(i)) {
                 Log.e("CameraView Debug", msg);

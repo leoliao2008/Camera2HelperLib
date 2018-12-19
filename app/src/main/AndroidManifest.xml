@@ -16,10 +16,9 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity android:name=".CameraViewActivity" />
-        <activity android:name=".NewCameraViewActivity"
-            android:theme="@style/FullScreenImmersiveStyle">
+        <activity android:name=".NewCameraViewActivity">
 
-        </activity>>
+        </activity>
         <activity android:name=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

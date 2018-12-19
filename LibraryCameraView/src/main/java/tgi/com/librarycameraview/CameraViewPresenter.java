@@ -24,7 +24,6 @@ import android.util.Size;
 import android.view.Surface;
 import android.view.TextureView;
 
-import java.util.SortedMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -61,6 +60,9 @@ class CameraViewPresenter {
     private AtomicInteger mCurrentCaptureState = new AtomicInteger(CAPTURE_STATE_PREVIEWING);
     private Semaphore mProcessLock = new Semaphore(1);
     private TensorFlowImageSubscriber mTensorFlowImageSubscriber;
+    private boolean mIsSwapWidthAndHeight;
+    private Size mSupportedPreviewSize;
+    private volatile boolean mIsCameraRunning=false;
 
 
     CameraViewPresenter(CameraView view) {
@@ -73,36 +75,43 @@ class CameraViewPresenter {
             e.printStackTrace();
             mView.onError(e);
         }
+        setSurfaceTextureListener();
+    }
+
+    private void setSurfaceTextureListener() {
+        mView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+            @Override
+            public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+                initAndOpenCamera(surface, width, height);
+            }
+
+            @Override
+            public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+                //随着SurfaceTexture尺寸的变化，同步预览图的矩阵，避免发生图像拉伸变形。
+                //这里非常重要，实测中发现如果不在这里同步，预览图经常会扭曲变形。
+                int deviceRotation = mView.getDisplay().getRotation();
+                configurePreviewTransform(width, height, surface, deviceRotation);
+            }
+
+            @Override
+            public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+                closeCamera();
+                return true;
+            }
+
+            @Override
+            public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+
+            }
+        });
     }
 
     void openCamera() {
         if (mView.isAvailable()) {
             initAndOpenCamera(mView.getSurfaceTexture(), mView.getWidth(), mView.getHeight());
         } else {
-            mView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-                @Override
-                public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-                    initAndOpenCamera(surface, width, height);
-                }
-
-                @Override
-                public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
-
-                }
-
-                @Override
-                public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
-                    closeCamera();
-                    return true;
-                }
-
-                @Override
-                public void onSurfaceTextureUpdated(SurfaceTexture surface) {
-
-                }
-            });
+            setSurfaceTextureListener();
         }
-
     }
 
     private void initBgHandler() {
@@ -111,10 +120,13 @@ class CameraViewPresenter {
         mBgThreadHandler = new android.os.Handler(mBgThread.getLooper());
     }
 
-    private void initAndOpenCamera(final SurfaceTexture surface, int width, int height) {
+    void initAndOpenCamera(final SurfaceTexture surface, int width, int height) {
         //这是保证打开摄像头的操作和关闭摄像头的操作的不会同时进行，造成冲突。
         if (!mCameraLock.tryAcquire()) {
-            showLog("mCameraLock.tryAcquire()=false,abort");
+            return;
+        }
+        //如果摄像头已经在运行，直接返回。
+        if(mIsCameraRunning){
             return;
         }
 
@@ -123,8 +135,8 @@ class CameraViewPresenter {
         try {
             final int deviceRotation = mView.getDisplay().getRotation();
             //判断当前视图是横屏还是竖屏，因为摄像头只有横屏，需要匹配最接近的一个相片尺寸。
-            final boolean isSwapWidthAndHeight = (deviceRotation == Surface.ROTATION_0 || deviceRotation == Surface.ROTATION_180);
-            if (isSwapWidthAndHeight) {
+            mIsSwapWidthAndHeight = (deviceRotation == Surface.ROTATION_0 || deviceRotation == Surface.ROTATION_180);
+            if (mIsSwapWidthAndHeight) {
                 mTargetCameraWidth = height;
                 mTargetCameraHeight = width;
             } else {
@@ -140,56 +152,43 @@ class CameraViewPresenter {
 
             mModel.initTensorFlowInput(tensorFlowOptimalSize, deviceRotation);
 
-
-            final Size supportedPreviewSize = mModel.getOptimalSupportedPreviewSize(
+            mSupportedPreviewSize = mModel.getOptimalSupportedPreviewSize(
                     mCameraManager,
                     mCameraId,
                     mTargetCameraWidth,
                     mTargetCameraHeight);
-            //以下所有操作都需要在回调中执行，保证预览视图已经调整完成，尺寸是我想要的尺寸。
-            mView.setSizeChangeListener(new CameraView.SizeChangeListener() {
+
+            //初步计算预览图的矩阵，避免拉伸。只是在这里设置是不够的，因为待会还会调整
+            //surface texture的尺寸，到时还要重新计算。计算的时机为onSurfaceTextureSizeChanged这个回调中。
+            //为什么知道待会要重新计算矩阵，在这里提前设置一次？这是因为onSurfaceTextureSizeChanged
+            //在尺寸没有变更时不会触发。这里是为了保险起见。
+            configurePreviewTransform(width, height, surface, deviceRotation);
+
+            mTakeStillPicImageReader = ImageReader.newInstance(
+                    mSupportedPreviewSize.getWidth(),
+                    mSupportedPreviewSize.getHeight(),
+                    ImageFormat.JPEG,
+                    2
+            );
+
+            //tensorFlow
+            mTensorFlowImageReader = ImageReader.newInstance(
+                    tensorFlowOptimalSize.getWidth(),
+                    tensorFlowOptimalSize.getHeight(),
+                    ImageFormat.YUV_420_888,
+                    2
+            );
+            mTensorFlowImageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
                 @Override
-                public void onSizeChanged(final int w, final int h) {
-                    //每次调整尺寸后调用这个回调一次即可，防止重复打开摄像头。
-                    mView.setSizeChangeListener(null);
-                    if (isSwapWidthAndHeight) {
-                        //更新最新尺寸
-                        mTargetCameraWidth = h;
-                        mTargetCameraHeight = w;
-                    } else {
-                        //更新最新尺寸
-                        mTargetCameraWidth = w;
-                        mTargetCameraHeight = h;
-                    }
-                    //防止预览图变形
-                    surface.setDefaultBufferSize(supportedPreviewSize.getWidth(), supportedPreviewSize.getHeight());
-
-                    //防止预览图变形
-                    Matrix matrix = mModel.genPreviewTransformMatrix(
-                            supportedPreviewSize,
-                            new Size(mTargetCameraWidth, mTargetCameraHeight),
-                            deviceRotation);
-                    mView.setTransform(matrix);
-
-                    mTakeStillPicImageReader = ImageReader.newInstance(
-                            supportedPreviewSize.getWidth(),
-                            supportedPreviewSize.getHeight(),
-                            ImageFormat.JPEG,
-                            2
-                    );
-
-                    //tensorFlow
-                    mTensorFlowImageReader = ImageReader.newInstance(
-                            tensorFlowOptimalSize.getWidth(),
-                            tensorFlowOptimalSize.getHeight(),
-                            ImageFormat.YUV_420_888,
-                            2
-                    );
-                    mTensorFlowImageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
-                        @Override
-                        public void onImageAvailable(final ImageReader reader) {
-                            if (mTensorFlowImageSubscriber != null) {
-                                if (mDynamicProcessingLock.tryAcquire()) {
+                public void onImageAvailable(final ImageReader reader) {
+                    boolean isForfeit = true;
+                    if (mTensorFlowImageSubscriber != null) {
+                        if (mDynamicProcessingLock.tryAcquire()) {
+                            isForfeit = false;
+                            //新建一条线程专门处理以下逻辑，bgThread处理的任务有点多了，否则预览页面会卡顿
+                            new Thread(new Runnable() {
+                                @Override
+                                public void run() {
                                     Image image = reader.acquireLatestImage();
                                     // image将在getImageFromYUV_420_888Format运行到一半的时候在函数内部被释放。
                                     // 因为运算太耗时，如果放在函数外面释放，有可能在释放的时候跳空指针。
@@ -200,82 +199,106 @@ class CameraViewPresenter {
                                     }
                                     mDynamicProcessingLock.release();
                                 }
-                            } else {
-                                //手动处理image，否则接收不到新的图像。
-                                Image image = reader.acquireLatestImage();
-                                if (image != null) {
-                                    image.close();
-                                }
-                            }
+                            }).start();
                         }
-                    }, mBgThreadHandler);
-
-                    try {
-                        //保证预览尺寸已经调整好、不会拉伸变形后，正式打开摄像头。
-                        mModel.openCamera(mCameraManager, mCameraId, new CameraDevice.StateCallback() {
-                                    @Override
-                                    public void onOpened(@NonNull CameraDevice camera) {
-                                        mCameraLock.release();
-                                        mCameraDevice = camera;
-                                        showLog("camera open!");
-                                        try {
-                                            mModel.createPreviewSession(
-                                                    camera,
-                                                    new CameraCaptureSessionStateCallback() {
-                                                        @Override
-                                                        public void onSessionEstablished(CaptureRequest.Builder builder,
-                                                                                         CameraCaptureSession session) {
-                                                            mRequestBuilder = builder;
-                                                            mCaptureSession = session;
-                                                        }
-
-                                                        @Override
-                                                        public void onFailToEstablishSession() {
-                                                            closeCamera();
-                                                        }
-                                                    },
-                                                    mBgThreadHandler,
-                                                    new Surface(surface),
-                                                    mTakeStillPicImageReader.getSurface(),
-                                                    mTensorFlowImageReader.getSurface());
-                                        } catch (CameraAccessException e) {
-                                            e.printStackTrace();
-                                            mView.onError(e);
-                                        }
-
-                                    }
-
-                                    @Override
-                                    public void onDisconnected(@NonNull CameraDevice camera) {
-                                        mCameraLock.release();
-                                    }
-
-                                    @Override
-                                    public void onError(@NonNull CameraDevice camera, int error) {
-                                        mCameraLock.release();
-                                        closeCamera();
-
-                                    }
-                                },
-                                mBgThreadHandler);
-
-                    } catch (CameraAccessException e) {
-                        e.printStackTrace();
-                        mView.onError(e);
+                    }
+                    if (isForfeit) {
+                        //手动处理image，否则接收不到新的图像。
+                        Image image = reader.acquireLatestImage();
+                        if (image != null) {
+                            image.close();
+                        }
                     }
                 }
-            });
-            //这里让预览图根据最优预览尺寸调整大小比例，因为是异步操作，后续获取最新尺寸的操作必须在上面回调中执行。
-            if (isSwapWidthAndHeight) {
-                mView.resetWidthHeightRatio(supportedPreviewSize.getHeight(), supportedPreviewSize.getWidth());
+            }, mBgThreadHandler);
+
+            try {
+                //正式打开摄像头。
+                mModel.openCamera(mCameraManager, mCameraId, new CameraDevice.StateCallback() {
+                            @Override
+                            public void onOpened(@NonNull CameraDevice camera) {
+                                mCameraDevice = camera;
+                                showLog("camera open!", 1);
+                                try {
+                                    mModel.createPreviewSession(
+                                            camera,
+                                            new CameraCaptureSessionStateCallback() {
+                                                @Override
+                                                public void onSessionEstablished(CaptureRequest.Builder builder,
+                                                                                 CameraCaptureSession session) {
+                                                    mRequestBuilder = builder;
+                                                    mCaptureSession = session;
+                                                    mIsCameraRunning=true;
+                                                    mCameraLock.release();
+                                                }
+
+                                                @Override
+                                                public void onFailToEstablishSession() {
+                                                    closeCamera();
+                                                    mCameraLock.release();
+                                                }
+                                            },
+                                            mBgThreadHandler,
+                                            new Surface(surface),
+                                            mTakeStillPicImageReader.getSurface(),
+                                            mTensorFlowImageReader.getSurface());
+                                } catch (CameraAccessException e) {
+                                    e.printStackTrace();
+                                    mView.onError(e);
+                                }
+
+                            }
+
+                            @Override
+                            public void onDisconnected(@NonNull CameraDevice camera) {
+                                mCameraLock.release();
+                            }
+
+                            @Override
+                            public void onError(@NonNull CameraDevice camera, int error) {
+                                mCameraLock.release();
+                                closeCamera();
+
+                            }
+                        },
+                        mBgThreadHandler);
+
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+                mView.onError(e);
+            }
+            //这里让预览图根据最优预览尺寸调整大小比例，因为预览图尺寸发生了变化，需要在onSurfaceTextureSizeChanged回调中调整预览图的矩阵。
+            if (mIsSwapWidthAndHeight) {
+                mView.resetWidthHeightRatio(mSupportedPreviewSize.getHeight(), mSupportedPreviewSize.getWidth());
             } else {
-                mView.resetWidthHeightRatio(supportedPreviewSize.getWidth(), supportedPreviewSize.getHeight());
+                mView.resetWidthHeightRatio(mSupportedPreviewSize.getWidth(), mSupportedPreviewSize.getHeight());
             }
         } catch (CameraAccessException e) {
             e.printStackTrace();
             mView.onError(e);
             closeCamera();
         }
+    }
+
+    private void configurePreviewTransform(int w, int h, SurfaceTexture surface, int deviceRotation) {
+        if (mIsSwapWidthAndHeight) {
+            //更新最新尺寸
+            mTargetCameraWidth = h;
+            mTargetCameraHeight = w;
+        } else {
+            //更新最新尺寸
+            mTargetCameraWidth = w;
+            mTargetCameraHeight = h;
+        }
+        //防止预览图变形
+        surface.setDefaultBufferSize(mSupportedPreviewSize.getWidth(), mSupportedPreviewSize.getHeight());
+
+        //防止预览图变形
+        Matrix matrix = mModel.genPreviewTransformMatrix(
+                mSupportedPreviewSize,
+                new Size(mTargetCameraWidth, mTargetCameraHeight),
+                deviceRotation);
+        mView.setTransform(matrix);
     }
 
     void takeStillPic(final TakeStillPicCallback callback) {
@@ -474,11 +497,19 @@ class CameraViewPresenter {
                 mTensorFlowImageReader.close();
                 mTensorFlowImageReader = null;
             }
+
+            mIsCameraRunning=false;
+
             mCameraLock.release();
         }
     }
 
     void showLog(String msg, int... logCodes) {
-        LogUtil.showLog(msg, logCodes);
+        if (logCodes.length < 1) {
+            LogUtil.showLog(msg, 1);
+        } else {
+            LogUtil.showLog(msg, logCodes);
+        }
+
     }
 }
