@@ -189,7 +189,7 @@ class CameraViewPresenter {
                         @Override
                         public void onImageAvailable(final ImageReader reader) {
                             if (mTensorFlowImageSubscriber != null) {
-                                if(mDynamicProcessingLock.tryAcquire()){
+                                if (mDynamicProcessingLock.tryAcquire()) {
                                     Image image = reader.acquireLatestImage();
                                     // image将在getImageFromYUV_420_888Format运行到一半的时候在函数内部被释放。
                                     // 因为运算太耗时，如果放在函数外面释放，有可能在释放的时候跳空指针。
@@ -203,7 +203,7 @@ class CameraViewPresenter {
                             } else {
                                 //手动处理image，否则接收不到新的图像。
                                 Image image = reader.acquireLatestImage();
-                                if(image!=null){
+                                if (image != null) {
                                     image.close();
                                 }
                             }
@@ -465,16 +465,15 @@ class CameraViewPresenter {
                 mCameraDevice = null;
             }
 
-//            //未知会有什么不良影响。
-//            if (mTakeStillPicImageReader != null) {
-//                mTakeStillPicImageReader.close();
-//                mTakeStillPicImageReader = null;
-//            }
-//
-//            if (mTensorFlowImageReader != null) {
-//                mTensorFlowImageReader.close();
-//                mTensorFlowImageReader = null;
-//            }
+            if (mTakeStillPicImageReader != null) {
+                mTakeStillPicImageReader.close();
+                mTakeStillPicImageReader = null;
+            }
+
+            if (mTensorFlowImageReader != null) {
+                mTensorFlowImageReader.close();
+                mTensorFlowImageReader = null;
+            }
             mCameraLock.release();
         }
     }
