@@ -62,7 +62,7 @@ class CameraViewPresenter {
     private TensorFlowImageSubscriber mTensorFlowImageSubscriber;
     private boolean mIsSwapWidthAndHeight;
     private Size mSupportedPreviewSize;
-    private volatile boolean mIsCameraRunning=false;
+    private volatile boolean mIsCameraRunning = false;
 
 
     CameraViewPresenter(CameraView view) {
@@ -126,7 +126,7 @@ class CameraViewPresenter {
             return;
         }
         //如果摄像头已经在运行，直接返回。
-        if(mIsCameraRunning){
+        if (mIsCameraRunning) {
             return;
         }
 
@@ -228,7 +228,7 @@ class CameraViewPresenter {
                                                                                  CameraCaptureSession session) {
                                                     mRequestBuilder = builder;
                                                     mCaptureSession = session;
-                                                    mIsCameraRunning=true;
+                                                    mIsCameraRunning = true;
                                                     mCameraLock.release();
                                                 }
 
@@ -498,7 +498,7 @@ class CameraViewPresenter {
                 mTensorFlowImageReader = null;
             }
 
-            mIsCameraRunning=false;
+            mIsCameraRunning = false;
 
             mCameraLock.release();
         }

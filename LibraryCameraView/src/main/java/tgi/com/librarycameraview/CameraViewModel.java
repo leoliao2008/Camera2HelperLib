@@ -372,6 +372,7 @@ class CameraViewModel {
                 Arrays.asList(preViewSurface, stillPicSurface, tensorFlowSurface),//这里需要把用到的surface都加进来，否则surface今后获取不到图像。
                 new CameraCaptureSession.StateCallback() {
                     AtomicBoolean isFirstOnConfigured = new AtomicBoolean(true);
+
                     @Override
                     public void onConfigured(@NonNull CameraCaptureSession session) {
                         try {

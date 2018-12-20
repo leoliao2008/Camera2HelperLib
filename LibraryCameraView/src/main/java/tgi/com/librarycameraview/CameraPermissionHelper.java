@@ -49,19 +49,19 @@ public class CameraPermissionHelper {
     public boolean onRequestPermissionResult(final Activity activity, final int requestCode,
                                              String[] permissions, int[] results, Runnable onGranted,
                                              final Runnable onDenied) {
-        boolean isConsumed=false;
-        if(requestCode==mRequestCode){
-            if(mAlertDialog!=null){
+        boolean isConsumed = false;
+        if (requestCode == mRequestCode) {
+            if (mAlertDialog != null) {
                 mAlertDialog.dismiss();
             }
-            isConsumed=true;
-            int len=permissions.length;
-            for(int i=0;i<len;i++){
-                if(permissions[i].equals(Manifest.permission.CAMERA)){
-                    if(results[i]!=PackageManager.PERMISSION_GRANTED){
-                        AlertDialog.Builder builder=new AlertDialog.Builder(activity);
+            isConsumed = true;
+            int len = permissions.length;
+            for (int i = 0; i < len; i++) {
+                if (permissions[i].equals(Manifest.permission.CAMERA)) {
+                    if (results[i] != PackageManager.PERMISSION_GRANTED) {
+                        AlertDialog.Builder builder = new AlertDialog.Builder(activity);
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            if(activity.shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)){
+                            if (activity.shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)) {
                                 mAlertDialog = builder.setTitle("Camera Permission Request")
                                         .setMessage("Camera function is required in this app in order to acquire image content for analysis, if you choose to reject this request, the app will be closed.")
                                         .setPositiveButton("Grant", new DialogInterface.OnClickListener() {
@@ -81,11 +81,11 @@ public class CameraPermissionHelper {
                                         .setCancelable(false)
                                         .create();
                                 mAlertDialog.show();
-                            }else {
+                            } else {
                                 requestCameraPermission(activity);
                             }
-                        }else {
-                            mAlertDialog= builder.setTitle("Camera Permission Request")
+                        } else {
+                            mAlertDialog = builder.setTitle("Camera Permission Request")
                                     .setMessage("This function needs camera permission to continue.")
                                     .setCancelable(false)
                                     .setPositiveButton("Ok", new DialogInterface.OnClickListener() {
@@ -105,7 +105,7 @@ public class CameraPermissionHelper {
                                     .create();
                             mAlertDialog.show();
                         }
-                    }else {
+                    } else {
                         onGranted.run();
                     }
                 }

@@ -21,7 +21,7 @@ public class CameraView extends TextureView {
     private CameraViewPresenter mPresenter;
     private int mRatioWidth = 0;
     private int mRatioHeight = 0;
-    private CameraViewScaleType mScaleType = CameraViewScaleType.CENTER_INSIDE;
+    private CameraViewScaleType mScaleType = CameraViewScaleType.CENTER_CROP;
 
     public CameraView(Context context) {
         this(context, null);
@@ -61,6 +61,7 @@ public class CameraView extends TextureView {
         if (0 < mRatioWidth && 0 < mRatioHeight) {
             if (mScaleType == CameraViewScaleType.CENTER_CROP) {
                 //centerCrop: 不需要改变视图比例，改变视图尺寸，使其能刚好塞进图像中，显示图像中间部分。
+                //视图放大后，部分内容会超出原先的视框，因此记得要居中。
                 if (width > height * 1.0f * mRatioWidth / mRatioHeight) {
                     height = (int) (width * 1.0f * mRatioHeight / mRatioWidth);
                 } else {
@@ -88,12 +89,12 @@ public class CameraView extends TextureView {
     }
 
     public void setScaleType(CameraViewScaleType scaleType) {
-//        if (mScaleType == scaleType) {
-//            return;
-//        }
-//        mScaleType = scaleType;
-//        mPresenter.closeCamera();
-//        mPresenter.openCamera();
+        //        if (mScaleType == scaleType) {
+        //            return;
+        //        }
+        //        mScaleType = scaleType;
+        //        mPresenter.closeCamera();
+        //        mPresenter.openCamera();
     }
 
     public void takePic(TakeStillPicCallback callback) {
