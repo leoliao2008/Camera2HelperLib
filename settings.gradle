@@ -1,2 +1,2 @@
-include ':app', ':LibraryCameraView'
+include ':app', ':LibraryCameraView', ':LibraryTensorFlow'
 include ':LibraryCameraTwo'
