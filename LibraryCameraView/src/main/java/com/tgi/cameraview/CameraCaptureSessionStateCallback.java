@@ -1,4 +1,4 @@
-package tgi.com.librarycameraview;
+package com.tgi.cameraview;
 
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CaptureRequest;

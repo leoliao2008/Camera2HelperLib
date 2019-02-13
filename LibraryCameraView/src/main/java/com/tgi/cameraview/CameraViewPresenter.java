@@ -1,4 +1,4 @@
-package tgi.com.librarycameraview;
+package com.tgi.cameraview;
 
 import android.content.Context;
 import android.graphics.Bitmap;

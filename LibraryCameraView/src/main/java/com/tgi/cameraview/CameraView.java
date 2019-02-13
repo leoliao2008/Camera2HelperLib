@@ -1,12 +1,9 @@
-package tgi.com.librarycameraview;
+package com.tgi.cameraview;
 
 import android.content.Context;
-import android.graphics.SurfaceTexture;
 import android.util.AttributeSet;
 import android.view.TextureView;
 import android.widget.Toast;
-
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * <p><b>Author:</b></p>

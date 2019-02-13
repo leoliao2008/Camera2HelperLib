@@ -1,4 +1,4 @@
-package tgi.com.librarycameraview;
+package com.tgi.cameraview;
 
 import android.annotation.SuppressLint;
 import android.graphics.Bitmap;
@@ -27,8 +27,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import static tgi.com.librarycameraview.CONSTANTS.INPUT_SIZE;
 
 /**
  * <p><b>Author:</b></p>
@@ -128,7 +126,7 @@ class CameraViewModel {
 
         mRgbBytes = new int[width * height];
         mRgbFrameBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        mCroppedBitmap = Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Bitmap.Config.ARGB_8888);
+        mCroppedBitmap = Bitmap.createBitmap(CONSTANTS.INPUT_SIZE, CONSTANTS.INPUT_SIZE, Bitmap.Config.ARGB_8888);
 
         //经真机实测得出的逻辑
         int degreeToRote = 0;
@@ -149,7 +147,7 @@ class CameraViewModel {
 
         mFrameToCropTransform = getTensorFlowTransformationMatrix(
                 width, height,
-                INPUT_SIZE, INPUT_SIZE,
+                CONSTANTS.INPUT_SIZE, CONSTANTS.INPUT_SIZE,
                 degreeToRote, true);
 
         Matrix cropToFrameTransform = new Matrix();

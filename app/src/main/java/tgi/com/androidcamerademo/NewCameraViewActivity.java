@@ -14,10 +14,10 @@ import android.widget.Switch;
 import android.widget.Toast;
 import android.widget.ToggleButton;
 
-import tgi.com.librarycameraview.CameraView;
-import tgi.com.librarycameraview.CameraViewScaleType;
-import tgi.com.librarycameraview.TakeStillPicCallback;
-import tgi.com.librarycameraview.TensorFlowImageSubscriber;
+import com.tgi.cameraview.CameraView;
+import com.tgi.cameraview.CameraViewScaleType;
+import com.tgi.cameraview.TakeStillPicCallback;
+import com.tgi.cameraview.TensorFlowImageSubscriber;
 
 public class NewCameraViewActivity extends AppCompatActivity {
     private CameraView mCameraView;

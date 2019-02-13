@@ -1,4 +1,4 @@
-package tgi.com.librarycameraview;
+package com.tgi.cameraview;
 
 import android.util.Size;
 

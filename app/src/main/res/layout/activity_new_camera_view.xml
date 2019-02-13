@@ -9,7 +9,7 @@
     android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
 
-    <tgi.com.librarycameraview.CameraView
+    <com.tgi.cameraview.CameraView
         android:id="@+id/activity_new_camera_view_camera_view"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
